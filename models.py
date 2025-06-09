@@ -12,7 +12,7 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationship to tasks assigned to this user
-    assigned_tasks = db.relationship('Task', backref='assigned_user', lazy=True)
+    assigned_tasks = db.relationship('Task', foreign_keys='Task.assigned_to_id', backref='assigned_user', lazy=True)
     
     def __repr__(self):
         return f'<User {self.username}>'
