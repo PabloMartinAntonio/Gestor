@@ -48,7 +48,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (startDate && endDate && startDate.value && endDate.value) {
                 if (new Date(startDate.value) > new Date(endDate.value)) {
                     e.preventDefault();
-                    showAlert('Start date cannot be after end date', 'error');
+                    showAlert('La fecha de inicio no puede ser posterior a la fecha de fin', 'error');
                     return false;
                 }
             }
@@ -60,7 +60,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (password && confirmPassword) {
                 if (password.value !== confirmPassword.value) {
                     e.preventDefault();
-                    showAlert('Passwords do not match', 'error');
+                    showAlert('Las contraseñas no coinciden', 'error');
                     return false;
                 }
             }
@@ -89,7 +89,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (submitBtn) {
                 submitBtn.disabled = true;
                 const originalText = submitBtn.innerHTML;
-                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Loading...';
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Cargando...';
                 
                 // Re-enable button after 3 seconds as fallback
                 setTimeout(() => {
@@ -182,7 +182,7 @@ document.addEventListener('click', function(e) {
         const form = e.target.closest('form');
         if (form && form.getAttribute('onsubmit').includes('confirm')) {
             e.preventDefault();
-            if (confirm('Are you sure you want to delete this task? This action cannot be undone.')) {
+            if (confirm('¿Estás seguro que querés eliminar esta tarea? Esta acción no se puede deshacer.')) {
                 form.submit();
             }
         }

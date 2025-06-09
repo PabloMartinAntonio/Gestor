@@ -263,7 +263,7 @@ def update_task_status(task_id):
     
     # Check permissions
     if not current_user.is_admin and task.assigned_to_id != current_user.id:
-        flash('Access denied.', 'error')
+        flash('Acceso denegado.', 'error')
         return redirect(url_for('dashboard'))
     
     new_status = request.form['status']
@@ -271,7 +271,7 @@ def update_task_status(task_id):
     task.updated_at = datetime.utcnow()
     
     db.session.commit()
-    flash('Task status updated successfully!', 'success')
+    flash('¡Estado de la tarea actualizado exitosamente!', 'success')
     
     if current_user.is_admin:
         return redirect(url_for('admin_dashboard'))
