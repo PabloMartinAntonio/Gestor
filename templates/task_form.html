@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ 'Edit Task' if task else 'Create Task' }} - Task Manager{% endblock %}
+{% block title %}{{ 'Editar Tarea' if task else 'Crear Tarea' }} - Gestor de Tareas{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
@@ -9,31 +9,31 @@
             <div class="card-header">
                 <h4 class="mb-0">
                     <i class="fas fa-{{ 'edit' if task else 'plus' }} me-2"></i>
-                    {{ 'Edit Task' if task else 'Create New Task' }}
+                    {{ 'Editar Tarea' if task else 'Crear Nueva Tarea' }}
                 </h4>
             </div>
             
             <div class="card-body">
                 <form method="POST">
                     <div class="mb-3">
-                        <label for="title" class="form-label">Task Title *</label>
+                        <label for="title" class="form-label">Título de la Tarea *</label>
                         <input type="text" class="form-control" id="title" name="title" 
                                value="{{ task.title if task else '' }}" required>
                     </div>
 
                     <div class="mb-3">
-                        <label for="description" class="form-label">Description</label>
+                        <label for="description" class="form-label">Descripción</label>
                         <textarea class="form-control" id="description" name="description" rows="4">{{ task.description if task else '' }}</textarea>
                     </div>
 
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label for="start_date" class="form-label">Start Date</label>
+                            <label for="start_date" class="form-label">Fecha de Inicio</label>
                             <input type="date" class="form-control" id="start_date" name="start_date"
                                    value="{{ task.start_date.strftime('%Y-%m-%d') if task and task.start_date else '' }}">
                         </div>
                         <div class="col-md-6">
-                            <label for="end_date" class="form-label">End Date</label>
+                            <label for="end_date" class="form-label">Fecha de Fin</label>
                             <input type="date" class="form-control" id="end_date" name="end_date"
                                    value="{{ task.end_date.strftime('%Y-%m-%d') if task and task.end_date else '' }}">
                         </div>
@@ -42,17 +42,17 @@
                     {% if current_user.is_admin %}
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label for="priority" class="form-label">Priority</label>
+                            <label for="priority" class="form-label">Prioridad</label>
                             <select class="form-select" id="priority" name="priority">
-                                <option value="low" {{ 'selected' if task and task.priority == 'low' else '' }}>Low</option>
-                                <option value="medium" {{ 'selected' if task and task.priority == 'medium' else '' }}>Medium</option>
-                                <option value="high" {{ 'selected' if task and task.priority == 'high' else '' }}>High</option>
+                                <option value="low" {{ 'selected' if task and task.priority == 'low' else '' }}>Baja</option>
+                                <option value="medium" {{ 'selected' if task and task.priority == 'medium' else '' }}>Media</option>
+                                <option value="high" {{ 'selected' if task and task.priority == 'high' else '' }}>Alta</option>
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <label for="assigned_to_id" class="form-label">Assign To</label>
+                            <label for="assigned_to_id" class="form-label">Asignar a</label>
                             <select class="form-select" id="assigned_to_id" name="assigned_to_id">
-                                <option value="">Unassigned</option>
+                                <option value="">Sin Asignar</option>
                                 {% for user in users %}
                                 <option value="{{ user.id }}" 
                                         {{ 'selected' if task and task.assigned_to_id == user.id else '' }}>
@@ -66,11 +66,11 @@
 
                     {% if task and (current_user.is_admin or task.assigned_to_id == current_user.id) %}
                     <div class="mb-3">
-                        <label for="status" class="form-label">Status</label>
+                        <label for="status" class="form-label">Estado</label>
                         <select class="form-select" id="status" name="status">
-                            <option value="pending" {{ 'selected' if task.status == 'pending' else '' }}>Pending</option>
-                            <option value="in_progress" {{ 'selected' if task.status == 'in_progress' else '' }}>In Progress</option>
-                            <option value="completed" {{ 'selected' if task.status == 'completed' else '' }}>Completed</option>
+                            <option value="pending" {{ 'selected' if task.status == 'pending' else '' }}>Pendiente</option>
+                            <option value="in_progress" {{ 'selected' if task.status == 'in_progress' else '' }}>En Progreso</option>
+                            <option value="completed" {{ 'selected' if task.status == 'completed' else '' }}>Completada</option>
                         </select>
                     </div>
                     {% endif %}
@@ -78,10 +78,10 @@
                     <div class="d-flex justify-content-end gap-2">
                         <a href="{{ url_for('admin_dashboard') if current_user.is_admin else url_for('dashboard') }}" 
                            class="btn btn-secondary">
-                            <i class="fas fa-times me-1"></i>Cancel
+                            <i class="fas fa-times me-1"></i>Cancelar
                         </a>
                         <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-save me-1"></i>{{ 'Update Task' if task else 'Create Task' }}
+                            <i class="fas fa-save me-1"></i>{{ 'Actualizar Tarea' if task else 'Crear Tarea' }}
                         </button>
                     </div>
                 </form>
