@@ -31,7 +31,7 @@ db.init_app(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
-login_manager.login_message = 'Please log in to access this page.'
+login_manager.login_message = 'Por favor iniciá sesión para acceder a esta página.'
 login_manager.login_message_category = 'info'
 
 @login_manager.user_loader
@@ -58,7 +58,7 @@ with app.app_context():
         )
         db.session.add(admin_user)
         db.session.commit()
-        app.logger.info("Created default admin user: admin/admin123")
+        app.logger.info("Usuario administrador creado: admin/admin123")
 
 # Import routes after app initialization
 import routes

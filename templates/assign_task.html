@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Assign Task - Task Manager{% endblock %}
+{% block title %}Asignar Tarea - Gestor de Tareas{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
@@ -8,7 +8,7 @@
         <div class="card shadow">
             <div class="card-header">
                 <h4 class="mb-0">
-                    <i class="fas fa-user-plus me-2"></i>Assign Task
+                    <i class="fas fa-user-plus me-2"></i>Asignar Tarea
                 </h4>
             </div>
             
@@ -27,9 +27,9 @@
 
                 <form method="POST">
                     <div class="mb-3">
-                        <label for="assigned_to_id" class="form-label">Assign To</label>
+                        <label for="assigned_to_id" class="form-label">Asignar a</label>
                         <select class="form-select" id="assigned_to_id" name="assigned_to_id">
-                            <option value="">Unassigned</option>
+                            <option value="">Sin Asignar</option>
                             {% for user in users %}
                             <option value="{{ user.id }}" 
                                     {{ 'selected' if task.assigned_to_id == user.id else '' }}>
@@ -41,10 +41,10 @@
 
                     <div class="d-flex justify-content-end gap-2">
                         <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">
-                            <i class="fas fa-times me-1"></i>Cancel
+                            <i class="fas fa-times me-1"></i>Cancelar
                         </a>
                         <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-save me-1"></i>Update Assignment
+                            <i class="fas fa-save me-1"></i>Actualizar Asignación
                         </button>
                     </div>
                 </form>

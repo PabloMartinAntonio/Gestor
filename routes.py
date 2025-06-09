@@ -33,7 +33,7 @@ def login():
             else:
                 return redirect(url_for('dashboard'))
         else:
-            flash('Invalid username or password', 'error')
+            flash('Usuario o contraseña incorrectos', 'error')
     
     return render_template('login.html')
 
@@ -47,15 +47,15 @@ def register():
         
         # Validation
         if password != confirm_password:
-            flash('Passwords do not match', 'error')
+            flash('Las contraseñas no coinciden', 'error')
             return render_template('register.html')
         
         if User.query.filter_by(username=username).first():
-            flash('Username already exists', 'error')
+            flash('El nombre de usuario ya existe', 'error')
             return render_template('register.html')
         
         if User.query.filter_by(email=email).first():
-            flash('Email already registered', 'error')
+            flash('El email ya está registrado', 'error')
             return render_template('register.html')
         
         # Create new user
@@ -69,7 +69,7 @@ def register():
         db.session.add(user)
         db.session.commit()
         
-        flash('Registration successful! Please log in.', 'success')
+        flash('¡Registro exitoso! Por favor iniciá sesión.', 'success')
         return redirect(url_for('login'))
     
     return render_template('register.html')
@@ -78,7 +78,7 @@ def register():
 @login_required
 def logout():
     logout_user()
-    flash('You have been logged out.', 'info')
+    flash('Has cerrado sesión correctamente.', 'info')
     return redirect(url_for('login'))
 
 @app.route('/dashboard')
