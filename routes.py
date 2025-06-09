@@ -103,7 +103,7 @@ def dashboard():
 @login_required
 def admin_dashboard():
     if not current_user.is_admin:
-        flash('Access denied. Admin privileges required.', 'error')
+        flash('Acceso denegado. Se requieren privilegios de administrador.', 'error')
         return redirect(url_for('dashboard'))
     
     # Get all tasks with filtering
@@ -131,7 +131,7 @@ def admin_dashboard():
 @login_required
 def create_task():
     if not current_user.is_admin:
-        flash('Access denied. Admin privileges required.', 'error')
+        flash('Acceso denegado. Se requieren privilegios de administrador.', 'error')
         return redirect(url_for('dashboard'))
     
     if request.method == 'POST':
@@ -148,7 +148,7 @@ def create_task():
         
         # Validation
         if start_date_obj and end_date_obj and start_date_obj > end_date_obj:
-            flash('Start date cannot be after end date', 'error')
+            flash('La fecha de inicio no puede ser posterior a la fecha de fin', 'error')
             return render_template('task_form.html', users=User.query.filter_by(is_admin=False).all())
         
         task = Task(
@@ -164,7 +164,7 @@ def create_task():
         db.session.add(task)
         db.session.commit()
         
-        flash('Task created successfully!', 'success')
+        flash('¡Tarea creada exitosamente!', 'success')
         return redirect(url_for('admin_dashboard'))
     
     users = User.query.filter_by(is_admin=False).all()
@@ -177,7 +177,7 @@ def edit_task(task_id):
     
     # Check permissions
     if not current_user.is_admin and task.assigned_to_id != current_user.id:
-        flash('Access denied.', 'error')
+        flash('Acceso denegado.', 'error')
         return redirect(url_for('dashboard'))
     
     if request.method == 'POST':
@@ -204,12 +204,12 @@ def edit_task(task_id):
         
         # Validation
         if task.start_date and task.end_date and task.start_date > task.end_date:
-            flash('Start date cannot be after end date', 'error')
+            flash('La fecha de inicio no puede ser posterior a la fecha de fin', 'error')
             users = User.query.filter_by(is_admin=False).all() if current_user.is_admin else []
             return render_template('task_form.html', task=task, users=users)
         
         db.session.commit()
-        flash('Task updated successfully!', 'success')
+        flash('¡Tarea actualizada exitosamente!', 'success')
         
         if current_user.is_admin:
             return redirect(url_for('admin_dashboard'))
@@ -226,20 +226,20 @@ def delete_task(task_id):
     
     # Only admins can delete tasks
     if not current_user.is_admin:
-        flash('Access denied. Admin privileges required.', 'error')
+        flash('Acceso denegado. Se requieren privilegios de administrador.', 'error')
         return redirect(url_for('dashboard'))
     
     db.session.delete(task)
     db.session.commit()
     
-    flash('Task deleted successfully!', 'success')
+    flash('¡Tarea eliminada exitosamente!', 'success')
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/assign_task/<int:task_id>', methods=['GET', 'POST'])
 @login_required
 def assign_task(task_id):
     if not current_user.is_admin:
-        flash('Access denied. Admin privileges required.', 'error')
+        flash('Acceso denegado. Se requieren privilegios de administrador.', 'error')
         return redirect(url_for('dashboard'))
     
     task = Task.query.get_or_404(task_id)
@@ -250,7 +250,7 @@ def assign_task(task_id):
         task.updated_at = datetime.utcnow()
         
         db.session.commit()
-        flash('Task assignment updated successfully!', 'success')
+        flash('¡Asignación de tarea actualizada exitosamente!', 'success')
         return redirect(url_for('admin_dashboard'))
     
     users = User.query.filter_by(is_admin=False).all()
