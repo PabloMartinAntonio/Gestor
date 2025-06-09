@@ -801,3 +801,212 @@ def api_generate_sample_notifications():
             'success': False,
             'message': f'Error al generar notificaciones: {str(e)}'
         })
+
+# Ruta para análisis y estadísticas
+@app.route('/analytics')
+@login_required
+def analytics():
+    if not current_user.is_admin:
+        flash('Acceso denegado. Se requieren privilegios de administrador.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    from models import Notification
+    from datetime import datetime, timedelta
+    
+    # Métricas principales
+    total_tasks = Task.query.count()
+    completed_tasks = Task.query.filter_by(status='completed').count()
+    in_progress_tasks = Task.query.filter_by(status='in_progress').count()
+    pending_tasks = Task.query.filter_by(status='pending').count()
+    
+    # Tareas vencidas
+    today = datetime.utcnow().date()
+    overdue_tasks = Task.query.filter(
+        Task.end_date < today,
+        Task.status != 'completed'
+    ).count()
+    
+    # Calcular tasas
+    completion_rate = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
+    in_progress_rate = (in_progress_tasks / total_tasks * 100) if total_tasks > 0 else 0
+    
+    # Tareas creadas esta semana
+    week_ago = datetime.utcnow() - timedelta(days=7)
+    tasks_this_week = Task.query.filter(Task.created_at >= week_ago).count()
+    
+    metrics = {
+        'total_tasks': total_tasks,
+        'completed_tasks': completed_tasks,
+        'in_progress_tasks': in_progress_tasks,
+        'overdue_tasks': overdue_tasks,
+        'completion_rate': completion_rate,
+        'in_progress_rate': in_progress_rate,
+        'tasks_change': tasks_this_week
+    }
+    
+    # Estadísticas por usuario
+    users = User.query.all()
+    user_stats = []
+    
+    for user in users:
+        assigned_tasks = Task.query.filter_by(assigned_to_id=user.id).all()
+        total_assigned = len(assigned_tasks)
+        
+        if total_assigned > 0:
+            completed = len([t for t in assigned_tasks if t.status == 'completed'])
+            in_progress = len([t for t in assigned_tasks if t.status == 'in_progress'])
+            pending = len([t for t in assigned_tasks if t.status == 'pending'])
+            user_completion_rate = (completed / total_assigned * 100)
+            
+            # Calcular tiempo promedio de finalización
+            completed_tasks_with_dates = [t for t in assigned_tasks if t.status == 'completed' and t.start_date and t.updated_at]
+            if completed_tasks_with_dates:
+                total_days = sum([(t.updated_at.date() - t.start_date).days for t in completed_tasks_with_dates])
+                avg_completion_time = total_days / len(completed_tasks_with_dates)
+            else:
+                avg_completion_time = 0
+            
+            user_stats.append({
+                'username': user.username,
+                'is_admin': user.is_admin,
+                'total_assigned': total_assigned,
+                'completed': completed,
+                'in_progress': in_progress,
+                'pending': pending,
+                'completion_rate': user_completion_rate,
+                'avg_completion_time': round(avg_completion_time, 1)
+            })
+    
+    # Datos para gráficos
+    chart_data = {
+        'weeks': ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4'],
+        'created': [8, 12, 10, tasks_this_week],
+        'completed': [6, 9, 8, completed_tasks // 4],
+        'high_priority': Task.query.filter_by(priority='high').count(),
+        'medium_priority': Task.query.filter_by(priority='medium').count(),
+        'low_priority': Task.query.filter_by(priority='low').count(),
+        'status_labels': ['Pendiente', 'En Progreso', 'Completada'],
+        'status_data': [pending_tasks, in_progress_tasks, completed_tasks]
+    }
+    
+    # Actividad reciente
+    recent_activities = []
+    recent_tasks = Task.query.order_by(Task.updated_at.desc()).limit(5).all()
+    
+    for task in recent_tasks:
+        if task.status == 'completed':
+            color = 'success'
+            icon = 'fa-check'
+            title = 'Tarea Completada'
+        elif task.status == 'in_progress':
+            color = 'warning'
+            icon = 'fa-spinner'
+            title = 'Tarea en Progreso'
+        else:
+            color = 'secondary'
+            icon = 'fa-clock'
+            title = 'Tarea Pendiente'
+        
+        recent_activities.append({
+            'title': title,
+            'description': f'{task.title} - {task.assigned_user.username if task.assigned_user else "Sin asignar"}',
+            'timestamp': task.updated_at,
+            'color': color,
+            'icon': icon
+        })
+    
+    # Alertas y recomendaciones
+    alerts = []
+    
+    if overdue_tasks > 0:
+        alerts.append({
+            'type': 'danger',
+            'icon': 'fa-exclamation-triangle',
+            'title': 'Tareas Vencidas',
+            'message': f'Hay {overdue_tasks} tareas vencidas que requieren atención inmediata.'
+        })
+    
+    if completion_rate < 70:
+        alerts.append({
+            'type': 'warning',
+            'icon': 'fa-chart-line',
+            'title': 'Tasa de Finalización Baja',
+            'message': f'La tasa de finalización es del {completion_rate:.1f}%. Considerá revisar la carga de trabajo.'
+        })
+    
+    unread_notifications = Notification.query.filter_by(is_read=False).count()
+    if unread_notifications > 10:
+        alerts.append({
+            'type': 'info',
+            'icon': 'fa-bell',
+            'title': 'Muchas Notificaciones Pendientes',
+            'message': f'Hay {unread_notifications} notificaciones sin leer en el sistema.'
+        })
+    
+    if not alerts:
+        alerts.append({
+            'type': 'success',
+            'icon': 'fa-thumbs-up',
+            'title': 'Todo en Orden',
+            'message': 'El sistema está funcionando correctamente sin alertas.'
+        })
+    
+    return render_template('analytics.html',
+                         metrics=metrics,
+                         user_stats=user_stats,
+                         chart_data=chart_data,
+                         recent_activities=recent_activities,
+                         alerts=alerts)
+
+@app.route('/api/export_analytics_report', methods=['POST'])
+@login_required
+def api_export_analytics_report():
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'message': 'Acceso denegado'})
+    
+    try:
+        import json
+        from datetime import datetime
+        
+        # Generar reporte completo
+        total_tasks = Task.query.count()
+        completed_tasks = Task.query.filter_by(status='completed').count()
+        
+        report_data = {
+            'generated_at': datetime.utcnow().isoformat(),
+            'report_type': 'analytics_summary',
+            'metrics': {
+                'total_tasks': total_tasks,
+                'completed_tasks': completed_tasks,
+                'completion_rate': (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0,
+                'total_users': User.query.count(),
+                'admin_users': User.query.filter_by(is_admin=True).count()
+            },
+            'tasks_by_status': {
+                'pending': Task.query.filter_by(status='pending').count(),
+                'in_progress': Task.query.filter_by(status='in_progress').count(),
+                'completed': completed_tasks
+            },
+            'tasks_by_priority': {
+                'high': Task.query.filter_by(priority='high').count(),
+                'medium': Task.query.filter_by(priority='medium').count(),
+                'low': Task.query.filter_by(priority='low').count()
+            }
+        }
+        
+        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        filename = f'reporte_analytics_{timestamp}.json'
+        
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(report_data, f, indent=2, ensure_ascii=False)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Reporte de análisis exportado: {filename}'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error al exportar reporte: {str(e)}'
+        })

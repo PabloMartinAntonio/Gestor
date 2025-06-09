@@ -1,0 +1,450 @@
+{% extends "base.html" %}
+
+{% block title %}Análisis y Estadísticas{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3">
+                    <i class="fas fa-chart-line me-2"></i>Análisis y Estadísticas
+                </h1>
+                <div class="btn-group">
+                    <button class="btn btn-outline-primary" onclick="refreshData()">
+                        <i class="fas fa-sync-alt"></i> Actualizar
+                    </button>
+                    <button class="btn btn-outline-success" onclick="exportReport()">
+                        <i class="fas fa-file-export"></i> Exportar Reporte
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Métricas Principales -->
+    <div class="row mb-4">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-primary text-white h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title text-uppercase mb-1">Tareas Totales</h6>
+                            <h2 class="mb-0">{{ metrics.total_tasks }}</h2>
+                            <small>
+                                {% if metrics.tasks_change >= 0 %}
+                                <i class="fas fa-arrow-up"></i> +{{ metrics.tasks_change }}
+                                {% else %}
+                                <i class="fas fa-arrow-down"></i> {{ metrics.tasks_change }}
+                                {% endif %}
+                                esta semana
+                            </small>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-tasks fa-2x opacity-75"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-success text-white h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title text-uppercase mb-1">Completadas</h6>
+                            <h2 class="mb-0">{{ metrics.completed_tasks }}</h2>
+                            <small>
+                                {{ metrics.completion_rate|round(1) }}% de finalización
+                            </small>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-check-circle fa-2x opacity-75"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-warning text-white h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title text-uppercase mb-1">En Progreso</h6>
+                            <h2 class="mb-0">{{ metrics.in_progress_tasks }}</h2>
+                            <small>
+                                {{ metrics.in_progress_rate|round(1) }}% del total
+                            </small>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-spinner fa-2x opacity-75"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-danger text-white h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="card-title text-uppercase mb-1">Vencidas</h6>
+                            <h2 class="mb-0">{{ metrics.overdue_tasks }}</h2>
+                            <small>
+                                Requieren atención inmediata
+                            </small>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-exclamation-triangle fa-2x opacity-75"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gráficos y Análisis -->
+    <div class="row mb-4">
+        <div class="col-lg-8">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Progreso de Tareas por Semana</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="tasksChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Distribución por Prioridad</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="priorityChart" width="200" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Análisis por Usuario -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Rendimiento por Usuario</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Usuario</th>
+                                    <th>Tareas Asignadas</th>
+                                    <th>Completadas</th>
+                                    <th>En Progreso</th>
+                                    <th>Pendientes</th>
+                                    <th>Tasa de Finalización</th>
+                                    <th>Tiempo Promedio</th>
+                                    <th>Rendimiento</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user_stat in user_stats %}
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="avatar-sm me-2">
+                                                <div class="avatar-title bg-primary rounded-circle">
+                                                    {{ user_stat.username[0].upper() }}
+                                                </div>
+                                            </div>
+                                            {{ user_stat.username }}
+                                            {% if user_stat.is_admin %}
+                                            <span class="badge bg-warning text-dark ms-2">Admin</span>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                    <td>{{ user_stat.total_assigned }}</td>
+                                    <td>
+                                        <span class="badge bg-success">{{ user_stat.completed }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-warning">{{ user_stat.in_progress }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-secondary">{{ user_stat.pending }}</span>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="progress me-2" style="width: 60px; height: 8px;">
+                                                <div class="progress-bar bg-success" 
+                                                     style="width: {{ user_stat.completion_rate }}%"></div>
+                                            </div>
+                                            {{ user_stat.completion_rate|round(1) }}%
+                                        </div>
+                                    </td>
+                                    <td>{{ user_stat.avg_completion_time }} días</td>
+                                    <td>
+                                        {% if user_stat.completion_rate >= 80 %}
+                                        <span class="badge bg-success">Excelente</span>
+                                        {% elif user_stat.completion_rate >= 60 %}
+                                        <span class="badge bg-warning">Bueno</span>
+                                        {% elif user_stat.completion_rate >= 40 %}
+                                        <span class="badge bg-info">Regular</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">Necesita Mejora</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Análisis de Tendencias -->
+    <div class="row mb-4">
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Tareas por Estado (Últimos 30 días)</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="statusTrendsChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Actividad Reciente</h5>
+                </div>
+                <div class="card-body">
+                    <div class="timeline">
+                        {% for activity in recent_activities %}
+                        <div class="timeline-item">
+                            <div class="timeline-marker bg-{{ activity.color }}">
+                                <i class="fas {{ activity.icon }}"></i>
+                            </div>
+                            <div class="timeline-content">
+                                <h6 class="mb-1">{{ activity.title }}</h6>
+                                <p class="mb-1 text-muted">{{ activity.description }}</p>
+                                <small class="text-muted">
+                                    <i class="fas fa-clock me-1"></i>
+                                    {{ activity.timestamp.strftime('%d/%m/%Y %H:%M') }}
+                                </small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alertas y Recomendaciones -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Alertas y Recomendaciones</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for alert in alerts %}
+                        <div class="col-md-6 mb-3">
+                            <div class="alert alert-{{ alert.type }} d-flex align-items-center" role="alert">
+                                <i class="fas {{ alert.icon }} me-2"></i>
+                                <div>
+                                    <strong>{{ alert.title }}</strong><br>
+                                    {{ alert.message }}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+// Datos para los gráficos (pasados desde el backend)
+const chartData = {{ chart_data|tojson }};
+
+// Configuración de gráficos
+const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+        legend: {
+            position: 'top',
+        }
+    }
+};
+
+// Gráfico de progreso de tareas
+const tasksCtx = document.getElementById('tasksChart').getContext('2d');
+new Chart(tasksCtx, {
+    type: 'line',
+    data: {
+        labels: chartData.weeks,
+        datasets: [{
+            label: 'Creadas',
+            data: chartData.created,
+            borderColor: 'rgb(75, 192, 192)',
+            backgroundColor: 'rgba(75, 192, 192, 0.1)',
+            tension: 0.4
+        }, {
+            label: 'Completadas',
+            data: chartData.completed,
+            borderColor: 'rgb(54, 162, 235)',
+            backgroundColor: 'rgba(54, 162, 235, 0.1)',
+            tension: 0.4
+        }]
+    },
+    options: chartOptions
+});
+
+// Gráfico de distribución por prioridad
+const priorityCtx = document.getElementById('priorityChart').getContext('2d');
+new Chart(priorityCtx, {
+    type: 'doughnut',
+    data: {
+        labels: ['Alta', 'Media', 'Baja'],
+        datasets: [{
+            data: [chartData.high_priority, chartData.medium_priority, chartData.low_priority],
+            backgroundColor: [
+                'rgba(255, 99, 132, 0.8)',
+                'rgba(255, 205, 86, 0.8)',
+                'rgba(75, 192, 192, 0.8)'
+            ]
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false
+    }
+});
+
+// Gráfico de tendencias de estado
+const statusCtx = document.getElementById('statusTrendsChart').getContext('2d');
+new Chart(statusCtx, {
+    type: 'bar',
+    data: {
+        labels: chartData.status_labels,
+        datasets: [{
+            label: 'Cantidad de Tareas',
+            data: chartData.status_data,
+            backgroundColor: [
+                'rgba(108, 117, 125, 0.8)',
+                'rgba(255, 193, 7, 0.8)',
+                'rgba(25, 135, 84, 0.8)'
+            ]
+        }]
+    },
+    options: chartOptions
+});
+
+// Funciones auxiliares
+function refreshData() {
+    location.reload();
+}
+
+function exportReport() {
+    showAlert('Generando reporte...', 'info');
+    fetch('/api/export_analytics_report', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'success');
+        } else {
+            showAlert(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showAlert('Error al generar el reporte', 'error');
+    });
+}
+</script>
+
+<style>
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 0;
+    height: 100%;
+    width: 2px;
+    background: #dee2e6;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -37px;
+    top: 0;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 12px;
+}
+
+.timeline-content {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 3px solid #007bff;
+}
+
+.avatar-sm {
+    width: 32px;
+    height: 32px;
+}
+
+.avatar-title {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.progress {
+    border-radius: 10px;
+}
+</style>
+{% endblock %}
