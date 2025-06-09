@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - Task Manager{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="fas fa-tachometer-alt me-2"></i>Admin Dashboard</h2>
+            <a href="{{ url_for('create_task') }}" class="btn btn-primary">
+                <i class="fas fa-plus me-1"></i>Create Task
+            </a>
+        </div>
+
+        <!-- Filters -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="btn-group w-100" role="group">
+                    <a href="{{ url_for('admin_dashboard', status='all', user=user_filter) }}" 
+                       class="btn {{ 'btn-primary' if status_filter == 'all' else 'btn-outline-primary' }}">
+                        All Status
+                    </a>
+                    <a href="{{ url_for('admin_dashboard', status='pending', user=user_filter) }}" 
+                       class="btn {{ 'btn-primary' if status_filter == 'pending' else 'btn-outline-primary' }}">
+                        Pending
+                    </a>
+                    <a href="{{ url_for('admin_dashboard', status='in_progress', user=user_filter) }}" 
+                       class="btn {{ 'btn-primary' if status_filter == 'in_progress' else 'btn-outline-primary' }}">
+                        In Progress
+                    </a>
+                    <a href="{{ url_for('admin_dashboard', status='completed', user=user_filter) }}" 
+                       class="btn {{ 'btn-primary' if status_filter == 'completed' else 'btn-outline-primary' }}">
+                        Completed
+                    </a>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="btn-group w-100" role="group">
+                    <a href="{{ url_for('admin_dashboard', status=status_filter, user='all') }}" 
+                       class="btn {{ 'btn-secondary' if user_filter == 'all' else 'btn-outline-secondary' }}">
+                        All Users
+                    </a>
+                    <a href="{{ url_for('admin_dashboard', status=status_filter, user='unassigned') }}" 
+                       class="btn {{ 'btn-secondary' if user_filter == 'unassigned' else 'btn-outline-secondary' }}">
+                        Unassigned
+                    </a>
+                    {% for user in users %}
+                    <a href="{{ url_for('admin_dashboard', status=status_filter, user=user.id) }}" 
+                       class="btn {{ 'btn-secondary' if user_filter == user.id|string else 'btn-outline-secondary' }}">
+                        {{ user.username }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        {% if tasks %}
+        <div class="row">
+            {% for task in tasks %}
+            <div class="col-md-6 col-lg-4 mb-4">
+                <div class="card h-100 task-card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span class="badge {{ task.priority_badge_class }}">
+                            {{ task.priority|title }}
+                        </span>
+                        <span class="badge {{ task.status_badge_class }}">
+                            {{ task.status.replace('_', ' ')|title }}
+                        </span>
+                    </div>
+                    
+                    <div class="card-body">
+                        <h5 class="card-title">{{ task.title }}</h5>
+                        {% if task.description %}
+                        <p class="card-text">{{ task.description[:100] }}{% if task.description|length > 100 %}...{% endif %}</p>
+                        {% endif %}
+                        
+                        <div class="small text-muted mb-3">
+                            {% if task.start_date %}
+                            <div><i class="fas fa-play me-1"></i>Start: {{ task.start_date.strftime('%Y-%m-%d') }}</div>
+                            {% endif %}
+                            {% if task.end_date %}
+                            <div><i class="fas fa-stop me-1"></i>End: {{ task.end_date.strftime('%Y-%m-%d') }}</div>
+                            {% endif %}
+                            <div><i class="fas fa-clock me-1"></i>Created: {{ task.created_at.strftime('%Y-%m-%d') }}</div>
+                            {% if task.assigned_user %}
+                            <div><i class="fas fa-user me-1"></i>Assigned to: {{ task.assigned_user.username }}</div>
+                            {% else %}
+                            <div><i class="fas fa-user-slash me-1"></i>Unassigned</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="card-footer">
+                        <div class="btn-group w-100 mb-2" role="group">
+                            <a href="{{ url_for('edit_task', task_id=task.id) }}" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-edit"></i> Edit
+                            </a>
+                            <a href="{{ url_for('assign_task', task_id=task.id) }}" class="btn btn-sm btn-outline-info">
+                                <i class="fas fa-user-plus"></i> Assign
+                            </a>
+                        </div>
+                        
+                        <div class="btn-group w-100" role="group">
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-sm btn-outline-success dropdown-toggle" data-bs-toggle="dropdown">
+                                    <i class="fas fa-tasks"></i> Status
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <li>
+                                        <form method="POST" action="{{ url_for('update_task_status', task_id=task.id) }}" class="d-inline">
+                                            <input type="hidden" name="status" value="pending">
+                                            <button type="submit" class="dropdown-item">
+                                                <i class="fas fa-clock text-warning me-1"></i>Pending
+                                            </button>
+                                        </form>
+                                    </li>
+                                    <li>
+                                        <form method="POST" action="{{ url_for('update_task_status', task_id=task.id) }}" class="d-inline">
+                                            <input type="hidden" name="status" value="in_progress">
+                                            <button type="submit" class="dropdown-item">
+                                                <i class="fas fa-play text-info me-1"></i>In Progress
+                                            </button>
+                                        </form>
+                                    </li>
+                                    <li>
+                                        <form method="POST" action="{{ url_for('update_task_status', task_id=task.id) }}" class="d-inline">
+                                            <input type="hidden" name="status" value="completed">
+                                            <button type="submit" class="dropdown-item">
+                                                <i class="fas fa-check text-success me-1"></i>Completed
+                                            </button>
+                                        </form>
+                                    </li>
+                                </ul>
+                            </div>
+                            
+                            <form method="POST" action="{{ url_for('delete_task', task_id=task.id) }}" class="d-inline" 
+                                  onsubmit="return confirm('Are you sure you want to delete this task?')">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    <i class="fas fa-trash"></i> Delete
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
+            <h4 class="text-muted">No tasks found</h4>
+            <p class="text-muted">
+                {% if status_filter != 'all' or user_filter != 'all' %}
+                No tasks match the current filters.
+                {% else %}
+                No tasks have been created yet.
+                {% endif %}
+            </p>
+            <a href="{{ url_for('create_task') }}" class="btn btn-primary">
+                <i class="fas fa-plus me-1"></i>Create First Task
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
