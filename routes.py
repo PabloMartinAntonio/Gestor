@@ -164,6 +164,10 @@ def create_task():
         db.session.add(task)
         db.session.commit()
         
+        # Generar notificación para el usuario asignado
+        if task.assigned_to_id:
+            notify_task_creation(task, current_user)
+        
         flash('¡Tarea creada exitosamente!', 'success')
         return redirect(url_for('admin_dashboard'))
     
@@ -245,11 +249,19 @@ def assign_task(task_id):
     task = Task.query.get_or_404(task_id)
     
     if request.method == 'POST':
+        old_assigned_id = task.assigned_to_id
         assigned_to_id = request.form.get('assigned_to_id')
-        task.assigned_to_id = int(assigned_to_id) if assigned_to_id else None
+        new_assigned_id = int(assigned_to_id) if assigned_to_id else None
+        task.assigned_to_id = new_assigned_id
         task.updated_at = datetime.utcnow()
         
         db.session.commit()
+        
+        # Generar notificación por asignación de tarea
+        if old_assigned_id != new_assigned_id and new_assigned_id:
+            assigned_user = User.query.get(new_assigned_id)
+            notify_task_assignment(task, assigned_user, current_user)
+        
         flash('¡Asignación de tarea actualizada exitosamente!', 'success')
         return redirect(url_for('admin_dashboard'))
     
@@ -266,11 +278,17 @@ def update_task_status(task_id):
         flash('Acceso denegado.', 'error')
         return redirect(url_for('dashboard'))
     
+    old_status = task.status
     new_status = request.form['status']
     task.status = new_status
     task.updated_at = datetime.utcnow()
     
     db.session.commit()
+    
+    # Generar notificación por cambio de estado
+    if old_status != new_status:
+        notify_status_change(task, old_status, new_status, current_user)
+    
     flash('¡Estado de la tarea actualizado exitosamente!', 'success')
     
     if current_user.is_admin:
@@ -544,3 +562,186 @@ def api_execute_sql():
             'success': False, 
             'message': f'Error en la consulta: {str(e)}'
         })
+
+# Funciones auxiliares para notificaciones
+def create_notification(user_id, title, message, notification_type, task_id=None):
+    """Crear una nueva notificación para un usuario"""
+    from models import Notification
+    notification = Notification(
+        user_id=user_id,
+        title=title,
+        message=message,
+        type=notification_type,
+        task_id=task_id
+    )
+    db.session.add(notification)
+    db.session.commit()
+    return notification
+
+def notify_task_assignment(task, assigned_user, assigned_by):
+    """Notificar cuando se asigna una tarea"""
+    if assigned_user:
+        title = "Nueva tarea asignada"
+        message = f"{assigned_by.username} te asignó la tarea '{task.title}'"
+        create_notification(assigned_user.id, title, message, 'task_assigned', task.id)
+
+def notify_status_change(task, old_status, new_status, changed_by):
+    """Notificar cuando cambia el estado de una tarea"""
+    status_names = {
+        'pending': 'Pendiente',
+        'in_progress': 'En Progreso', 
+        'completed': 'Completada'
+    }
+    
+    # Notificar al creador de la tarea
+    if task.created_by_id != changed_by.id:
+        title = "Estado de tarea actualizado"
+        message = f"{changed_by.username} cambió el estado de '{task.title}' de {status_names.get(old_status, old_status)} a {status_names.get(new_status, new_status)}"
+        create_notification(task.created_by_id, title, message, 'status_change', task.id)
+    
+    # Notificar al usuario asignado si es diferente
+    if task.assigned_to_id and task.assigned_to_id != changed_by.id and task.assigned_to_id != task.created_by_id:
+        title = "Estado de tu tarea actualizado"
+        message = f"El estado de tu tarea '{task.title}' cambió a {status_names.get(new_status, new_status)}"
+        create_notification(task.assigned_to_id, title, message, 'status_change', task.id)
+
+def notify_task_creation(task, created_by):
+    """Notificar cuando se crea una nueva tarea"""
+    if task.assigned_to_id and task.assigned_to_id != created_by.id:
+        title = "Nueva tarea creada y asignada"
+        message = f"{created_by.username} creó y te asignó la tarea '{task.title}'"
+        create_notification(task.assigned_to_id, title, message, 'task_created', task.id)
+
+def check_upcoming_deadlines():
+    """Verificar y notificar sobre fechas límite próximas"""
+    from datetime import datetime, timedelta
+    tomorrow = datetime.utcnow().date() + timedelta(days=1)
+    
+    # Buscar tareas que vencen mañana y no están completadas
+    upcoming_tasks = Task.query.filter(
+        Task.end_date == tomorrow,
+        Task.status != 'completed'
+    ).all()
+    
+    for task in upcoming_tasks:
+        # Verificar si ya se envió esta notificación
+        from models import Notification
+        existing = Notification.query.filter(
+            Notification.task_id == task.id,
+            Notification.type == 'deadline',
+            Notification.created_at >= datetime.utcnow().date()
+        ).first()
+        
+        if not existing:
+            if task.assigned_to_id:
+                title = "Fecha límite próxima"
+                message = f"La tarea '{task.title}' vence mañana"
+                create_notification(task.assigned_to_id, title, message, 'deadline', task.id)
+            
+            # También notificar al creador si es diferente
+            if task.created_by_id != task.assigned_to_id:
+                title = "Fecha límite próxima"
+                message = f"La tarea '{task.title}' que creaste vence mañana"
+                create_notification(task.created_by_id, title, message, 'deadline', task.id)
+
+# Rutas para notificaciones
+@app.route('/notifications')
+@login_required
+def notifications():
+    from models import Notification
+    
+    filter_type = request.args.get('filter', 'all')
+    type_filter = request.args.get('type', 'all')
+    page = request.args.get('page', 1, type=int)
+    
+    # Construir consulta base
+    query = Notification.query.filter_by(user_id=current_user.id)
+    
+    # Aplicar filtros
+    if filter_type == 'unread':
+        query = query.filter_by(is_read=False)
+    elif filter_type == 'read':
+        query = query.filter_by(is_read=True)
+    
+    if type_filter != 'all':
+        query = query.filter_by(type=type_filter)
+    
+    # Ordenar por fecha (más recientes primero)
+    query = query.order_by(Notification.created_at.desc())
+    
+    # Paginación
+    notifications = query.paginate(
+        page=page, per_page=10, error_out=False
+    )
+    
+    # Contar notificaciones no leídas
+    unread_count = Notification.query.filter_by(
+        user_id=current_user.id, is_read=False
+    ).count()
+    
+    return render_template('notifications.html',
+                         notifications=notifications,
+                         unread_count=unread_count,
+                         filter_type=filter_type,
+                         type_filter=type_filter)
+
+@app.route('/api/notifications/<int:notification_id>/read', methods=['POST'])
+@login_required
+def api_mark_notification_read(notification_id):
+    from models import Notification
+    notification = Notification.query.filter_by(
+        id=notification_id, user_id=current_user.id
+    ).first_or_404()
+    
+    notification.is_read = True
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Notificación marcada como leída'
+    })
+
+@app.route('/api/notifications/mark-all-read', methods=['POST'])
+@login_required
+def api_mark_all_notifications_read():
+    from models import Notification
+    notifications = Notification.query.filter_by(
+        user_id=current_user.id, is_read=False
+    ).all()
+    
+    count = len(notifications)
+    for notification in notifications:
+        notification.is_read = True
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': f'{count} notificaciones marcadas como leídas'
+    })
+
+@app.route('/api/notifications/<int:notification_id>', methods=['DELETE'])
+@login_required
+def api_delete_notification(notification_id):
+    from models import Notification
+    notification = Notification.query.filter_by(
+        id=notification_id, user_id=current_user.id
+    ).first_or_404()
+    
+    db.session.delete(notification)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Notificación eliminada'
+    })
+
+@app.route('/api/notifications/count')
+@login_required
+def api_notification_count():
+    from models import Notification
+    count = Notification.query.filter_by(
+        user_id=current_user.id, is_read=False
+    ).count()
+    
+    return jsonify({'count': count})

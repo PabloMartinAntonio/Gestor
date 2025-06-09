@@ -55,3 +55,21 @@ class Task(db.Model):
             'high': 'bg-danger'
         }
         return priority_classes.get(self.priority, 'bg-secondary')
+
+class Notification(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    type = db.Column(db.String(50), nullable=False)  # task_assigned, status_change, deadline, task_created
+    is_read = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relaciones
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user = db.relationship('User', backref='notifications')
+    
+    task_id = db.Column(db.Integer, db.ForeignKey('task.id'), nullable=True)
+    task = db.relationship('Task', backref='notifications')
+    
+    def __repr__(self):
+        return f'<Notification {self.title}>'
