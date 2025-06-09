@@ -293,6 +293,24 @@
                 <div class="col-md-6">
                     <div class="card">
                         <div class="card-header">
+                            <h5 class="mb-0">Sistema de Notificaciones</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted">Probá el sistema de notificaciones y verificá fechas límite.</p>
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-info" onclick="generateSampleNotifications()">
+                                    <i class="fas fa-bell"></i> Generar Notificaciones de Prueba
+                                </button>
+                                <button class="btn btn-warning" onclick="checkDeadlines()">
+                                    <i class="fas fa-clock"></i> Verificar Fechas Límite
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
                             <h5 class="mb-0">Limpiar Datos</h5>
                         </div>
                         <div class="card-body">
@@ -484,6 +502,58 @@ function cleanOldTasks() {
             showAlert('Error al limpiar las tareas', 'error');
         });
     }
+}
+
+function generateSampleNotifications() {
+    if (confirm('¿Querés generar notificaciones de ejemplo para probar el sistema?')) {
+        showAlert('Generando notificaciones...', 'info');
+        fetch('/api/generate_sample_notifications', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert(data.message, 'success');
+                // Actualizar contador de notificaciones
+                if (typeof updateNotificationCount === 'function') {
+                    updateNotificationCount();
+                }
+            } else {
+                showAlert(data.message, 'error');
+            }
+        })
+        .catch(error => {
+            showAlert('Error al generar notificaciones', 'error');
+        });
+    }
+}
+
+function checkDeadlines() {
+    showAlert('Verificando fechas límite...', 'info');
+    fetch('/api/check_deadlines', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'success');
+            // Actualizar contador de notificaciones
+            if (typeof updateNotificationCount === 'function') {
+                updateNotificationCount();
+            }
+        } else {
+            showAlert(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showAlert('Error al verificar fechas límite', 'error');
+    });
 }
 
 function clearQuery() {

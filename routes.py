@@ -745,3 +745,59 @@ def api_notification_count():
     ).count()
     
     return jsonify({'count': count})
+
+# Función de tarea en segundo plano para verificar fechas límite
+@app.route('/api/check_deadlines', methods=['POST'])
+@login_required
+def api_check_deadlines():
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'message': 'Acceso denegado'})
+    
+    check_upcoming_deadlines()
+    return jsonify({
+        'success': True,
+        'message': 'Verificación de fechas límite completada'
+    })
+
+# Función para generar notificaciones de ejemplo
+@app.route('/api/generate_sample_notifications', methods=['POST'])
+@login_required
+def api_generate_sample_notifications():
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'message': 'Acceso denegado'})
+    
+    try:
+        # Crear algunas notificaciones de ejemplo para demostrar el sistema
+        sample_notifications = [
+            {
+                'title': 'Bienvenido al sistema de notificaciones',
+                'message': 'Este es un ejemplo de notificación del sistema. Aquí recibirás actualizaciones sobre tus tareas.',
+                'type': 'task_created'
+            },
+            {
+                'title': 'Función de notificaciones activada',
+                'message': 'Las notificaciones automáticas están funcionando correctamente. Te avisaremos sobre cambios en tus tareas.',
+                'type': 'status_change'
+            }
+        ]
+        
+        count = 0
+        for notif in sample_notifications:
+            create_notification(
+                user_id=current_user.id,
+                title=notif['title'],
+                message=notif['message'],
+                notification_type=notif['type']
+            )
+            count += 1
+        
+        return jsonify({
+            'success': True,
+            'message': f'Se generaron {count} notificaciones de ejemplo'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error al generar notificaciones: {str(e)}'
+        })
