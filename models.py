@@ -20,6 +20,17 @@ class User(UserMixin, db.Model):
     # Relationship to tasks assigned to this user
     assigned_tasks = db.relationship('Task', foreign_keys='Task.assigned_to_id', backref='assigned_user', lazy=True)
     
+    def calculate_next_level_points(self):
+        """Calcular puntos necesarios para el siguiente nivel"""
+        return ((self.level) ** 2) * 100
+    
+    def get_level_progress(self):
+        """Obtener progreso hacia el siguiente nivel (0-100)"""
+        next_level_points = self.calculate_next_level_points()
+        if next_level_points == 0:
+            return 100
+        return min(100, (self.points / next_level_points * 100))
+    
     def __repr__(self):
         return f'<User {self.username}>'
 

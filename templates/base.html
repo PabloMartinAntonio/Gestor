@@ -61,6 +61,11 @@
                             <i class="fas fa-trophy me-1"></i>Logros
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('calendar_integration') }}">
+                            <i class="fab fa-google me-1"></i>Calendar
+                        </a>
+                    </li>
                 </ul>
                 
                 <ul class="navbar-nav">
@@ -123,6 +128,17 @@
     
     {% if current_user.is_authenticated %}
     <script>
+    // Registrar Service Worker para modo offline
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js')
+            .then(function(registration) {
+                console.log('Service Worker registrado exitosamente');
+            })
+            .catch(function(error) {
+                console.log('Error al registrar Service Worker:', error);
+            });
+    }
+
     // Actualizar contador de notificaciones
     function updateNotificationCount() {
         fetch('/api/notifications/count')
@@ -140,16 +156,56 @@
         })
         .catch(error => {
             console.error('Error al actualizar el contador de notificaciones:', error);
+            // En modo offline, mantener último estado conocido
         });
     }
+
+    // Detectar estado online/offline
+    window.addEventListener('online', function() {
+        showAlert('Conexión restaurada. Sincronizando...', 'success');
+        // Sincronizar datos offline
+        fetch('/api/offline/sync', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.synced_count > 0) {
+                    showAlert(`Se sincronizaron ${data.synced_count} acciones offline`, 'info');
+                }
+            });
+    });
+
+    window.addEventListener('offline', function() {
+        showAlert('Sin conexión. Trabajando en modo offline', 'warning');
+    });
 
     // Actualizar contador al cargar la página
     document.addEventListener('DOMContentLoaded', function() {
         updateNotificationCount();
         
-        // Actualizar cada 30 segundos
-        setInterval(updateNotificationCount, 30000);
+        // Actualizar cada 30 segundos si hay conexión
+        setInterval(function() {
+            if (navigator.onLine) {
+                updateNotificationCount();
+            }
+        }, 30000);
+        
+        // Mostrar indicador de nivel del usuario
+        updateUserLevelDisplay();
     });
+
+    function updateUserLevelDisplay() {
+        const userLevel = {{ current_user.level }};
+        const userPoints = {{ current_user.points }};
+        
+        // Agregar indicador de nivel en el menú si no existe
+        const userDropdown = document.querySelector('.navbar-nav .dropdown-toggle');
+        if (userDropdown && !userDropdown.querySelector('.level-indicator')) {
+            const levelBadge = document.createElement('span');
+            levelBadge.className = 'badge bg-info ms-1 level-indicator';
+            levelBadge.textContent = `Nv.${userLevel}`;
+            levelBadge.title = `${userPoints} puntos`;
+            userDropdown.appendChild(levelBadge);
+        }
+    }
     </script>
     {% endif %}
 </body>

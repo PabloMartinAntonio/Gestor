@@ -1,0 +1,394 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Permisos de Usuario{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3">
+                    <i class="fas fa-user-shield me-2"></i>Gestión de Permisos de Usuario
+                </h1>
+                <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Volver al Panel
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Información de permisos -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="alert alert-info">
+                <h6 class="alert-heading">Tipos de Permisos</h6>
+                <div class="row">
+                    <div class="col-md-4">
+                        <strong>Administrador:</strong> Acceso completo al sistema, puede gestionar usuarios y permisos.
+                    </div>
+                    <div class="col-md-4">
+                        <strong>Asignar Tareas:</strong> Puede crear y asignar tareas a otros usuarios.
+                    </div>
+                    <div class="col-md-4">
+                        <strong>Crear Grupos:</strong> Puede crear grupos de trabajo privados e invitar usuarios.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista de usuarios con permisos -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Usuarios del Sistema</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Usuario</th>
+                                    <th>Email</th>
+                                    <th>Fecha Registro</th>
+                                    <th>Administrador</th>
+                                    <th>Asignar Tareas</th>
+                                    <th>Crear Grupos</th>
+                                    <th>Nivel/Puntos</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user in users %}
+                                <tr id="user-row-{{ user.id }}" class="{{ 'table-warning' if user.id == current_user.id else '' }}">
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="avatar-sm me-2">
+                                                <div class="avatar-title bg-primary rounded-circle">
+                                                    {{ user.username[0].upper() }}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <strong>{{ user.username }}</strong>
+                                                {% if user.id == current_user.id %}
+                                                <span class="badge bg-info ms-1">Vos</span>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>{{ user.email }}</td>
+                                    <td>{{ user.created_at.strftime('%d/%m/%Y') }}</td>
+                                    <td>
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input permission-toggle" 
+                                                   type="checkbox" 
+                                                   data-user-id="{{ user.id }}"
+                                                   data-permission="is_admin"
+                                                   {{ 'checked' if user.is_admin else '' }}
+                                                   {{ 'disabled' if user.id == current_user.id and users|selectattr('is_admin')|list|length <= 1 else '' }}>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input permission-toggle" 
+                                                   type="checkbox" 
+                                                   data-user-id="{{ user.id }}"
+                                                   data-permission="can_assign_tasks"
+                                                   {{ 'checked' if user.can_assign_tasks else '' }}>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input permission-toggle" 
+                                                   type="checkbox" 
+                                                   data-user-id="{{ user.id }}"
+                                                   data-permission="can_create_groups"
+                                                   {{ 'checked' if user.can_create_groups else '' }}>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div>
+                                            <span class="badge bg-info">Nv. {{ user.level }}</span>
+                                            <br>
+                                            <small class="text-muted">{{ user.points }} puntos</small>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-primary" onclick="viewUserStats({{ user.id }}, '{{ user.username }}')">
+                                                <i class="fas fa-chart-bar"></i> Estadísticas
+                                            </button>
+                                            {% if user.id != current_user.id %}
+                                            <button class="btn btn-outline-warning" onclick="resetUserPassword({{ user.id }}, '{{ user.username }}')">
+                                                <i class="fas fa-key"></i> Reset Pass
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estadísticas de permisos -->
+    <div class="row mt-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="text-primary">{{ stats.total_users }}</h3>
+                    <p class="mb-0">Total Usuarios</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="text-danger">{{ stats.admin_users }}</h3>
+                    <p class="mb-0">Administradores</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="text-success">{{ stats.can_assign_users }}</h3>
+                    <p class="mb-0">Pueden Asignar</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="text-info">{{ stats.can_create_groups_users }}</h3>
+                    <p class="mb-0">Pueden Crear Grupos</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para estadísticas de usuario -->
+<div class="modal fade" id="userStatsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Estadísticas de Usuario</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="userStatsContent">
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Cargando...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Manejo de cambios de permisos
+document.querySelectorAll('.permission-toggle').forEach(toggle => {
+    toggle.addEventListener('change', function() {
+        const userId = this.dataset.userId;
+        const permission = this.dataset.permission;
+        const isChecked = this.checked;
+        
+        // Mostrar indicador de carga
+        this.disabled = true;
+        
+        const permissions = {};
+        permissions[permission] = isChecked;
+        
+        fetch(`/api/users/${userId}/permissions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(permissions)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert(data.message, 'success');
+                
+                // Si se cambió el permiso de admin, actualizar la fila
+                if (permission === 'is_admin') {
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                }
+            } else {
+                showAlert(data.message, 'error');
+                // Revertir el cambio si falló
+                this.checked = !isChecked;
+            }
+        })
+        .catch(error => {
+            showAlert('Error al actualizar permisos', 'error');
+            this.checked = !isChecked;
+        })
+        .finally(() => {
+            this.disabled = false;
+        });
+    });
+});
+
+function viewUserStats(userId, username) {
+    const modal = new bootstrap.Modal(document.getElementById('userStatsModal'));
+    document.querySelector('#userStatsModal .modal-title').textContent = `Estadísticas de ${username}`;
+    
+    // Cargar estadísticas
+    fetch(`/api/users/${userId}/stats`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const content = `
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Actividad de Tareas</h6>
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item d-flex justify-content-between">
+                                    <span>Tareas Asignadas:</span>
+                                    <strong>${data.stats.total_tasks}</strong>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between">
+                                    <span>Completadas:</span>
+                                    <strong class="text-success">${data.stats.completed_tasks}</strong>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between">
+                                    <span>En Progreso:</span>
+                                    <strong class="text-warning">${data.stats.in_progress_tasks}</strong>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between">
+                                    <span>Pendientes:</span>
+                                    <strong class="text-secondary">${data.stats.pending_tasks}</strong>
+                                </li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Gamificación</h6>
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item d-flex justify-content-between">
+                                    <span>Nivel:</span>
+                                    <strong class="text-info">${data.stats.level}</strong>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between">
+                                    <span>Puntos:</span>
+                                    <strong class="text-primary">${data.stats.points}</strong>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between">
+                                    <span>Logros:</span>
+                                    <strong class="text-warning">${data.stats.achievements}</strong>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between">
+                                    <span>Grupos:</span>
+                                    <strong class="text-success">${data.stats.groups}</strong>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <h6>Últimas Tareas</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Tarea</th>
+                                        <th>Estado</th>
+                                        <th>Fecha</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.stats.recent_tasks.map(task => `
+                                        <tr>
+                                            <td>${task.title}</td>
+                                            <td><span class="badge bg-${task.status === 'completed' ? 'success' : task.status === 'in_progress' ? 'warning' : 'secondary'}">${task.status_text}</span></td>
+                                            <td>${task.updated_at}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('userStatsContent').innerHTML = content;
+            } else {
+                document.getElementById('userStatsContent').innerHTML = '<div class="alert alert-danger">Error al cargar estadísticas</div>';
+            }
+        })
+        .catch(error => {
+            document.getElementById('userStatsContent').innerHTML = '<div class="alert alert-danger">Error de conexión</div>';
+        });
+    
+    modal.show();
+}
+
+function resetUserPassword(userId, username) {
+    if (confirm(`¿Estás seguro que querés resetear la contraseña de ${username}? Se generará una nueva contraseña temporal.`)) {
+        fetch(`/api/users/${userId}/reset-password`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert(`Nueva contraseña para ${username}: ${data.new_password}`, 'success');
+            } else {
+                showAlert(data.message, 'error');
+            }
+        })
+        .catch(error => {
+            showAlert('Error al resetear contraseña', 'error');
+        });
+    }
+}
+</script>
+
+<style>
+.avatar-sm {
+    width: 32px;
+    height: 32px;
+}
+
+.avatar-title {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.form-switch .form-check-input {
+    cursor: pointer;
+}
+
+.form-switch .form-check-input:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.table-warning {
+    background-color: rgba(255, 193, 7, 0.1) !important;
+}
+
+.card {
+    transition: transform 0.2s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+}
+</style>
+{% endblock %}

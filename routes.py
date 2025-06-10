@@ -1676,3 +1676,106 @@ def api_update_user_permissions(user_id):
             'success': False,
             'message': f'Error al actualizar permisos: {str(e)}'
         })
+
+# Ruta para gestión de permisos
+@app.route('/user_permissions')
+@login_required
+def user_permissions():
+    if not current_user.is_admin:
+        flash('Acceso denegado. Se requieren privilegios de administrador.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    users = User.query.order_by(User.created_at.desc()).all()
+    
+    # Estadísticas de permisos
+    stats = {
+        'total_users': len(users),
+        'admin_users': len([u for u in users if u.is_admin]),
+        'can_assign_users': len([u for u in users if u.can_assign_tasks]),
+        'can_create_groups_users': len([u for u in users if u.can_create_groups])
+    }
+    
+    return render_template('user_permissions.html', users=users, stats=stats)
+
+@app.route('/api/users/<int:user_id>/stats')
+@login_required
+def api_user_stats(user_id):
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'message': 'Acceso denegado'})
+    
+    try:
+        user = User.query.get_or_404(user_id)
+        
+        # Estadísticas de tareas
+        total_tasks = Task.query.filter_by(assigned_to_id=user_id).count()
+        completed_tasks = Task.query.filter_by(assigned_to_id=user_id, status='completed').count()
+        in_progress_tasks = Task.query.filter_by(assigned_to_id=user_id, status='in_progress').count()
+        pending_tasks = Task.query.filter_by(assigned_to_id=user_id, status='pending').count()
+        
+        # Gamificación
+        achievements_count = len(user.user_achievements)
+        groups_count = user.groups.count()
+        
+        # Tareas recientes
+        recent_tasks = Task.query.filter_by(assigned_to_id=user_id).order_by(Task.updated_at.desc()).limit(5).all()
+        recent_tasks_data = []
+        
+        for task in recent_tasks:
+            status_text = {
+                'pending': 'Pendiente',
+                'in_progress': 'En Progreso',
+                'completed': 'Completada'
+            }.get(task.status, task.status)
+            
+            recent_tasks_data.append({
+                'title': task.title,
+                'status': task.status,
+                'status_text': status_text,
+                'updated_at': task.updated_at.strftime('%d/%m/%Y')
+            })
+        
+        stats = {
+            'total_tasks': total_tasks,
+            'completed_tasks': completed_tasks,
+            'in_progress_tasks': in_progress_tasks,
+            'pending_tasks': pending_tasks,
+            'level': user.level,
+            'points': user.points,
+            'achievements': achievements_count,
+            'groups': groups_count,
+            'recent_tasks': recent_tasks_data
+        }
+        
+        return jsonify({'success': True, 'stats': stats})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/api/users/<int:user_id>/reset-password', methods=['POST'])
+@login_required
+def api_reset_user_password(user_id):
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'message': 'Acceso denegado'})
+    
+    try:
+        import secrets
+        import string
+        
+        user = User.query.get_or_404(user_id)
+        
+        # Generar contraseña temporal
+        alphabet = string.ascii_letters + string.digits
+        new_password = ''.join(secrets.choice(alphabet) for _ in range(8))
+        
+        # Actualizar contraseña
+        user.password_hash = generate_password_hash(new_password)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'new_password': new_password,
+            'message': f'Contraseña reseteada para {user.username}'
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
