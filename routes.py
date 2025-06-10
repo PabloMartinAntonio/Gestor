@@ -2120,3 +2120,50 @@ def api_admin_delete_group(group_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'message': str(e)})
+
+# Ruta para restablecer contraseña
+@app.route('/forgot-password')
+def forgot_password():
+    return render_template('forgot_password.html')
+
+@app.route('/api/forgot-password', methods=['POST'])
+def api_forgot_password():
+    try:
+        import secrets
+        import string
+        
+        data = request.get_json()
+        username = data.get('username')
+        
+        if not username:
+            return jsonify({'success': False, 'message': 'El nombre de usuario es requerido'})
+        
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            return jsonify({'success': False, 'message': 'Usuario no encontrado'})
+        
+        # Generar nueva contraseña temporal
+        alphabet = string.ascii_letters + string.digits
+        new_password = ''.join(secrets.choice(alphabet) for _ in range(10))
+        
+        # Actualizar contraseña
+        user.password_hash = generate_password_hash(new_password)
+        db.session.commit()
+        
+        # Crear notificación
+        create_notification(
+            user.id,
+            'Contraseña Restablecida',
+            'Tu contraseña ha sido restablecida exitosamente. Cambiala después del primer inicio de sesión.',
+            'password_reset'
+        )
+        
+        return jsonify({
+            'success': True,
+            'new_password': new_password,
+            'message': f'Nueva contraseña generada para {username}'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)})
