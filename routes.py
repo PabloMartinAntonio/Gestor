@@ -1225,12 +1225,28 @@ def api_create_group():
         from models import WorkGroup
         data = request.get_json()
         
+        # Validar datos requeridos
+        if not data.get('name'):
+            return jsonify({'success': False, 'message': 'El nombre del grupo es requerido'})
+        
+        if data.get('is_private', True) and not data.get('password'):
+            return jsonify({'success': False, 'message': 'Los grupos privados requieren contraseña'})
+
         group = WorkGroup(
             name=data['name'],
             description=data.get('description', ''),
             is_private=data.get('is_private', True),
+            max_members=int(data.get('max_members', 50)),
+            allow_member_invite=data.get('allow_member_invite', False),
             created_by_id=current_user.id
         )
+        
+        # Establecer contraseña si el grupo es privado
+        if data.get('password'):
+            group.set_password(data['password'])
+        
+        # Generar token de invitación
+        group.generate_invite_token()
         
         db.session.add(group)
         db.session.flush()  # Para obtener el ID
@@ -1240,9 +1256,19 @@ def api_create_group():
         
         db.session.commit()
         
+        # Crear notificación
+        create_notification(
+            current_user.id,
+            'Grupo Creado',
+            f'Tu grupo "{group.name}" fue creado exitosamente',
+            'group_created'
+        )
+        
         return jsonify({
             'success': True,
-            'message': f'Grupo "{group.name}" creado exitosamente'
+            'message': f'Grupo "{group.name}" creado exitosamente',
+            'group_id': group.id,
+            'invite_link': group.get_invite_link(request.url_root.rstrip('/'))
         })
         
     except Exception as e:

@@ -112,6 +112,10 @@ class WorkGroup(db.Model):
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
     is_private = db.Column(db.Boolean, default=True, nullable=False)
+    password_hash = db.Column(db.String(256))  # Contraseña hasheada del grupo
+    invite_token = db.Column(db.String(128), unique=True)  # Token único para invitaciones
+    max_members = db.Column(db.Integer, default=50)
+    allow_member_invite = db.Column(db.Boolean, default=False)  # Si los miembros pueden invitar
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relaciones
@@ -129,10 +133,36 @@ class WorkGroup(db.Model):
         return user in self.members
     
     def is_admin(self, user):
+        # El administrador del sistema puede ver todos los grupos
+        if user.is_admin:
+            return True
+        # El creador del grupo es admin
+        if user.id == self.created_by_id:
+            return True
+        # Verificar si tiene rol de admin en el grupo
         membership = db.session.query(user_group_membership).filter_by(
             user_id=user.id, group_id=self.id
         ).first()
         return membership and membership.role == 'admin'
+    
+    def check_password(self, password):
+        """Verificar contraseña del grupo"""
+        from werkzeug.security import check_password_hash
+        return check_password_hash(self.password_hash, password)
+    
+    def set_password(self, password):
+        """Establecer contraseña del grupo"""
+        from werkzeug.security import generate_password_hash
+        self.password_hash = generate_password_hash(password)
+    
+    def generate_invite_token(self):
+        """Generar token único para invitaciones"""
+        import secrets
+        self.invite_token = secrets.token_urlsafe(32)
+        
+    def get_invite_link(self, base_url):
+        """Obtener link de invitación completo"""
+        return f"{base_url}/group/join/{self.invite_token}"
 
 class Achievement(db.Model):
     id = db.Column(db.Integer, primary_key=True)
