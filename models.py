@@ -9,6 +9,12 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
+    can_assign_tasks = db.Column(db.Boolean, default=False, nullable=False)
+    can_create_groups = db.Column(db.Boolean, default=False, nullable=False)
+    points = db.Column(db.Integer, default=0, nullable=False)
+    level = db.Column(db.Integer, default=1, nullable=False)
+    google_calendar_token = db.Column(db.Text)
+    last_sync = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationship to tasks assigned to this user
@@ -73,3 +79,88 @@ class Notification(db.Model):
     
     def __repr__(self):
         return f'<Notification {self.title}>'
+
+# Tabla de asociación para usuarios y grupos
+user_group_membership = db.Table('user_group_membership',
+    db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
+    db.Column('group_id', db.Integer, db.ForeignKey('work_group.id'), primary_key=True),
+    db.Column('role', db.String(20), default='member'),  # admin, member
+    db.Column('joined_at', db.DateTime, default=datetime.utcnow)
+)
+
+# Tabla de asociación para tareas y múltiples usuarios asignados
+task_assignments = db.Table('task_assignments',
+    db.Column('task_id', db.Integer, db.ForeignKey('task.id'), primary_key=True),
+    db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
+    db.Column('assigned_at', db.DateTime, default=datetime.utcnow),
+    db.Column('status', db.String(20), default='pending')  # pending, accepted, completed
+)
+
+class WorkGroup(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    is_private = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relaciones
+    created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_by = db.relationship('User', backref='created_groups')
+    
+    # Relación many-to-many con usuarios
+    members = db.relationship('User', secondary=user_group_membership, 
+                            backref=db.backref('groups', lazy='dynamic'))
+    
+    def __repr__(self):
+        return f'<WorkGroup {self.name}>'
+    
+    def is_member(self, user):
+        return user in self.members
+    
+    def is_admin(self, user):
+        membership = db.session.query(user_group_membership).filter_by(
+            user_id=user.id, group_id=self.id
+        ).first()
+        return membership and membership.role == 'admin'
+
+class Achievement(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    icon = db.Column(db.String(50), default='fa-trophy')
+    points_required = db.Column(db.Integer, default=0)
+    tasks_required = db.Column(db.Integer, default=0)
+    level_required = db.Column(db.Integer, default=1)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<Achievement {self.name}>'
+
+class UserAchievement(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    achievement_id = db.Column(db.Integer, db.ForeignKey('achievement.id'), nullable=False)
+    earned_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relaciones
+    user = db.relationship('User', backref='user_achievements')
+    achievement = db.relationship('Achievement', backref='user_achievements')
+    
+    def __repr__(self):
+        return f'<UserAchievement {self.user.username} - {self.achievement.name}>'
+
+class OfflineAction(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    action_type = db.Column(db.String(50), nullable=False)  # create_task, update_task, etc.
+    action_data = db.Column(db.Text, nullable=False)  # JSON data
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    synced = db.Column(db.Boolean, default=False)
+    synced_at = db.Column(db.DateTime)
+    
+    # Relaciones
+    user = db.relationship('User', backref='offline_actions')
+    
+    def __repr__(self):
+        return f'<OfflineAction {self.action_type} by {self.user.username}>'
