@@ -1,0 +1,417 @@
+{% extends "base.html" %}
+
+{% block title %}Grupos de Trabajo{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3">
+                    <i class="fas fa-users me-2"></i>Grupos de Trabajo
+                </h1>
+                <div class="btn-group">
+                    {% if current_user.can_create_groups or current_user.is_admin %}
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createGroupModal">
+                        <i class="fas fa-plus me-1"></i>Crear Grupo
+                    </button>
+                    {% endif %}
+                    <button class="btn btn-outline-secondary" onclick="refreshGroups()">
+                        <i class="fas fa-sync-alt"></i> Actualizar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pestañas de navegación -->
+    <ul class="nav nav-tabs mb-4" id="groupTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="my-groups-tab" data-bs-toggle="tab" data-bs-target="#my-groups" type="button" role="tab">
+                <i class="fas fa-user-friends me-1"></i>Mis Grupos ({{ my_groups|length }})
+            </button>
+        </li>
+        {% if current_user.can_create_groups or current_user.is_admin %}
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="created-groups-tab" data-bs-toggle="tab" data-bs-target="#created-groups" type="button" role="tab">
+                <i class="fas fa-crown me-1"></i>Grupos Creados ({{ created_groups|length }})
+            </button>
+        </li>
+        {% endif %}
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="invitations-tab" data-bs-toggle="tab" data-bs-target="#invitations" type="button" role="tab">
+                <i class="fas fa-envelope me-1"></i>Invitaciones ({{ pending_invitations|length }})
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="groupTabsContent">
+        <!-- Mis Grupos -->
+        <div class="tab-pane fade show active" id="my-groups" role="tabpanel">
+            {% if my_groups %}
+            <div class="row">
+                {% for group in my_groups %}
+                <div class="col-lg-4 col-md-6 mb-4">
+                    <div class="card group-card h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <div>
+                                    <h5 class="card-title mb-1">{{ group.name }}</h5>
+                                    <small class="text-muted">
+                                        <i class="fas fa-user me-1"></i>{{ group.created_by.username }}
+                                    </small>
+                                </div>
+                                {% if group.is_private %}
+                                <span class="badge bg-warning">
+                                    <i class="fas fa-lock"></i> Privado
+                                </span>
+                                {% else %}
+                                <span class="badge bg-success">
+                                    <i class="fas fa-globe"></i> Público
+                                </span>
+                                {% endif %}
+                            </div>
+                            
+                            {% if group.description %}
+                            <p class="card-text text-muted small">{{ group.description[:100] }}{% if group.description|length > 100 %}...{% endif %}</p>
+                            {% endif %}
+                            
+                            <div class="mb-3">
+                                <small class="text-muted">
+                                    <i class="fas fa-users me-1"></i>{{ group.members|length }} miembros
+                                </small>
+                                <br>
+                                <small class="text-muted">
+                                    <i class="fas fa-calendar me-1"></i>Creado {{ group.created_at.strftime('%d/%m/%Y') }}
+                                </small>
+                            </div>
+                            
+                            <div class="d-flex justify-content-between">
+                                <a href="{{ url_for('group_detail', group_id=group.id) }}" class="btn btn-outline-primary btn-sm">
+                                    <i class="fas fa-eye"></i> Ver
+                                </a>
+                                <button class="btn btn-outline-danger btn-sm" onclick="leaveGroup({{ group.id }}, '{{ group.name }}')">
+                                    <i class="fas fa-sign-out-alt"></i> Salir
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">No pertenecés a ningún grupo</h5>
+                <p class="text-muted">Esperá a ser invitado o creá tu propio grupo si tenés permisos.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Grupos Creados -->
+        {% if current_user.can_create_groups or current_user.is_admin %}
+        <div class="tab-pane fade" id="created-groups" role="tabpanel">
+            {% if created_groups %}
+            <div class="row">
+                {% for group in created_groups %}
+                <div class="col-lg-4 col-md-6 mb-4">
+                    <div class="card group-card h-100 border-primary">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <div>
+                                    <h5 class="card-title mb-1">{{ group.name }}</h5>
+                                    <small class="text-primary">
+                                        <i class="fas fa-crown me-1"></i>Administrador
+                                    </small>
+                                </div>
+                                {% if group.is_private %}
+                                <span class="badge bg-warning">
+                                    <i class="fas fa-lock"></i> Privado
+                                </span>
+                                {% else %}
+                                <span class="badge bg-success">
+                                    <i class="fas fa-globe"></i> Público
+                                </span>
+                                {% endif %}
+                            </div>
+                            
+                            {% if group.description %}
+                            <p class="card-text text-muted small">{{ group.description[:100] }}{% if group.description|length > 100 %}...{% endif %}</p>
+                            {% endif %}
+                            
+                            <div class="mb-3">
+                                <small class="text-muted">
+                                    <i class="fas fa-users me-1"></i>{{ group.members|length }} miembros
+                                </small>
+                                <br>
+                                <small class="text-muted">
+                                    <i class="fas fa-calendar me-1"></i>Creado {{ group.created_at.strftime('%d/%m/%Y') }}
+                                </small>
+                            </div>
+                            
+                            <div class="btn-group w-100">
+                                <a href="{{ url_for('group_detail', group_id=group.id) }}" class="btn btn-primary btn-sm">
+                                    <i class="fas fa-cog"></i> Gestionar
+                                </a>
+                                <button class="btn btn-outline-info btn-sm" onclick="inviteToGroup({{ group.id }})">
+                                    <i class="fas fa-user-plus"></i> Invitar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-crown fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">No has creado ningún grupo</h5>
+                <p class="text-muted">Creá tu primer grupo para comenzar a colaborar con otros usuarios.</p>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createGroupModal">
+                    <i class="fas fa-plus me-1"></i>Crear Primer Grupo
+                </button>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Invitaciones -->
+        <div class="tab-pane fade" id="invitations" role="tabpanel">
+            {% if pending_invitations %}
+            <div class="row">
+                {% for invitation in pending_invitations %}
+                <div class="col-lg-6 mb-3">
+                    <div class="card invitation-card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="card-title mb-1">{{ invitation.group.name }}</h6>
+                                    <small class="text-muted">
+                                        Invitado por {{ invitation.invited_by.username }}
+                                    </small>
+                                    {% if invitation.group.description %}
+                                    <p class="mt-2 mb-0 small text-muted">{{ invitation.group.description[:80] }}{% if invitation.group.description|length > 80 %}...{% endif %}</p>
+                                    {% endif %}
+                                </div>
+                                <div class="btn-group-vertical">
+                                    <button class="btn btn-success btn-sm" onclick="acceptInvitation({{ invitation.id }})">
+                                        <i class="fas fa-check"></i> Aceptar
+                                    </button>
+                                    <button class="btn btn-outline-danger btn-sm" onclick="rejectInvitation({{ invitation.id }})">
+                                        <i class="fas fa-times"></i> Rechazar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-envelope-open fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">No tenés invitaciones pendientes</h5>
+                <p class="text-muted">Cuando alguien te invite a un grupo, aparecerá acá.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal para crear grupo -->
+<div class="modal fade" id="createGroupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Crear Nuevo Grupo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="createGroupForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="groupName" class="form-label">Nombre del Grupo *</label>
+                        <input type="text" class="form-control" id="groupName" name="name" required maxlength="100">
+                    </div>
+                    <div class="mb-3">
+                        <label for="groupDescription" class="form-label">Descripción</label>
+                        <textarea class="form-control" id="groupDescription" name="description" rows="3" maxlength="500"></textarea>
+                        <div class="form-text">Opcional. Describe el propósito del grupo.</div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="isPrivate" name="is_private" checked>
+                            <label class="form-check-label" for="isPrivate">
+                                Grupo Privado
+                            </label>
+                        </div>
+                        <div class="form-text">Los grupos privados requieren invitación para unirse.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Crear Grupo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function refreshGroups() {
+    location.reload();
+}
+
+function leaveGroup(groupId, groupName) {
+    if (confirm(`¿Estás seguro que querés salir del grupo "${groupName}"?`)) {
+        fetch(`/api/groups/${groupId}/leave`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert(data.message, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showAlert(data.message, 'error');
+            }
+        })
+        .catch(error => {
+            showAlert('Error al salir del grupo', 'error');
+        });
+    }
+}
+
+function acceptInvitation(invitationId) {
+    fetch(`/api/group-invitations/${invitationId}/accept`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showAlert(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showAlert('Error al aceptar la invitación', 'error');
+    });
+}
+
+function rejectInvitation(invitationId) {
+    fetch(`/api/group-invitations/${invitationId}/reject`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showAlert(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showAlert('Error al rechazar la invitación', 'error');
+    });
+}
+
+function inviteToGroup(groupId) {
+    // Implementar modal de invitación
+    const email = prompt('Ingresá el email del usuario a invitar:');
+    if (email && email.trim()) {
+        fetch(`/api/groups/${groupId}/invite`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email: email.trim() })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert(data.message, 'success');
+            } else {
+                showAlert(data.message, 'error');
+            }
+        })
+        .catch(error => {
+            showAlert('Error al enviar la invitación', 'error');
+        });
+    }
+}
+
+// Manejo del formulario de creación de grupo
+document.getElementById('createGroupForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = {
+        name: formData.get('name'),
+        description: formData.get('description'),
+        is_private: formData.get('is_private') === 'on'
+    };
+    
+    fetch('/api/groups/create', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'success');
+            const modal = bootstrap.Modal.getInstance(document.getElementById('createGroupModal'));
+            modal.hide();
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showAlert(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showAlert('Error al crear el grupo', 'error');
+    });
+});
+</script>
+
+<style>
+.group-card {
+    transition: all 0.3s ease;
+    border: 1px solid #dee2e6;
+}
+
+.group-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.invitation-card {
+    border-left: 4px solid #007bff;
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+}
+
+.btn-group-vertical .btn {
+    margin-bottom: 2px;
+}
+
+.btn-group-vertical .btn:last-child {
+    margin-bottom: 0;
+}
+
+.badge {
+    font-size: 0.7rem;
+}
+</style>
+{% endblock %}

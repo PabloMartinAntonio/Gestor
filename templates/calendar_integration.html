@@ -1,0 +1,403 @@
+{% extends "base.html" %}
+
+{% block title %}Integración con Google Calendar{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3">
+                    <i class="fab fa-google me-2"></i>Integración con Google Calendar
+                </h1>
+                <div class="btn-group">
+                    {% if current_user.google_calendar_token %}
+                    <button class="btn btn-success" onclick="syncCalendar()">
+                        <i class="fas fa-sync-alt"></i> Sincronizar
+                    </button>
+                    <button class="btn btn-outline-danger" onclick="disconnectCalendar()">
+                        <i class="fas fa-unlink"></i> Desconectar
+                    </button>
+                    {% else %}
+                    <button class="btn btn-primary" onclick="connectCalendar()">
+                        <i class="fab fa-google"></i> Conectar Google Calendar
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if current_user.google_calendar_token %}
+    <!-- Estado de conexión -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="alert alert-success d-flex align-items-center" role="alert">
+                <i class="fas fa-check-circle me-2"></i>
+                <div>
+                    <strong>Google Calendar conectado exitosamente</strong><br>
+                    <small>
+                        Última sincronización: 
+                        {% if current_user.last_sync %}
+                        {{ current_user.last_sync.strftime('%d/%m/%Y %H:%M') }}
+                        {% else %}
+                        Nunca
+                        {% endif %}
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuración de sincronización -->
+    <div class="row mb-4">
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Configuración de Sincronización</h5>
+                </div>
+                <div class="card-body">
+                    <form id="syncConfigForm">
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="autoSync" checked>
+                                <label class="form-check-label" for="autoSync">
+                                    Sincronización automática
+                                </label>
+                            </div>
+                            <small class="form-text text-muted">Sincronizar tareas automáticamente al crear o modificar</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="syncDeadlines" checked>
+                                <label class="form-check-label" for="syncDeadlines">
+                                    Crear eventos para fechas límite
+                                </label>
+                            </div>
+                            <small class="form-text text-muted">Agregar eventos en el calendario para las fechas límite de tareas</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="calendarName" class="form-label">Calendario de destino</label>
+                            <select class="form-select" id="calendarName">
+                                <option value="primary">Calendario principal</option>
+                                <option value="tasks">Tareas (crear calendario dedicado)</option>
+                            </select>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">Guardar Configuración</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Estadísticas de Sincronización</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <h4 class="text-primary">{{ sync_stats.synced_tasks }}</h4>
+                            <small class="text-muted">Tareas Sincronizadas</small>
+                        </div>
+                        <div class="col-4">
+                            <h4 class="text-success">{{ sync_stats.calendar_events }}</h4>
+                            <small class="text-muted">Eventos Creados</small>
+                        </div>
+                        <div class="col-4">
+                            <h4 class="text-warning">{{ sync_stats.pending_sync }}</h4>
+                            <small class="text-muted">Pendientes</small>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="mb-3">
+                        <small class="text-muted">Próxima sincronización automática:</small>
+                        <div id="nextSyncTime" class="fw-bold">En 5 minutos</div>
+                    </div>
+                    
+                    <button class="btn btn-outline-info btn-sm w-100" onclick="viewSyncLog()">
+                        <i class="fas fa-list"></i> Ver Registro de Sincronización
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tareas recientes sincronizadas -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Tareas Sincronizadas Recientemente</h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_synced_tasks %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Tarea</th>
+                                    <th>Estado</th>
+                                    <th>Fecha Límite</th>
+                                    <th>Sincronizado</th>
+                                    <th>Evento en Calendar</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for task in recent_synced_tasks %}
+                                <tr>
+                                    <td>
+                                        <div>
+                                            <strong>{{ task.title }}</strong>
+                                            <br><small class="text-muted">{{ task.description[:50] }}{% if task.description|length > 50 %}...{% endif %}</small>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge {{ task.status_badge_class() }}">
+                                            {% if task.status == 'pending' %}Pendiente
+                                            {% elif task.status == 'in_progress' %}En Progreso
+                                            {% elif task.status == 'completed' %}Completada
+                                            {% endif %}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if task.end_date %}
+                                        {{ task.end_date.strftime('%d/%m/%Y') }}
+                                        {% else %}
+                                        <span class="text-muted">Sin fecha</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <small class="text-success">
+                                            <i class="fas fa-check"></i> 
+                                            {{ task.updated_at.strftime('%d/%m %H:%M') }}
+                                        </small>
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-outline-primary btn-sm" onclick="openCalendarEvent('{{ task.id }}')">
+                                            <i class="fab fa-google"></i> Ver en Calendar
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fab fa-google-drive fa-3x text-muted mb-3"></i>
+                        <h6 class="text-muted">No hay tareas sincronizadas aún</h6>
+                        <p class="text-muted">Las tareas se sincronizarán automáticamente al crearlas o modificarlas.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <!-- Instrucciones de conexión -->
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="card">
+                <div class="card-body text-center py-5">
+                    <i class="fab fa-google fa-4x text-primary mb-4"></i>
+                    <h4>Conectá tu Google Calendar</h4>
+                    <p class="text-muted mb-4">
+                        Sincronizá tus tareas con Google Calendar para tener todo organizado en un solo lugar.
+                        Las tareas se crearán como eventos con recordatorios automáticos.
+                    </p>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-4 mb-3">
+                            <div class="feature-item">
+                                <i class="fas fa-sync fa-2x text-success mb-2"></i>
+                                <h6>Sincronización Automática</h6>
+                                <small class="text-muted">Las tareas se sincronizan automáticamente</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="feature-item">
+                                <i class="fas fa-bell fa-2x text-warning mb-2"></i>
+                                <h6>Recordatorios</h6>
+                                <small class="text-muted">Recibí notificaciones antes de las fechas límite</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="feature-item">
+                                <i class="fas fa-calendar-check fa-2x text-info mb-2"></i>
+                                <h6>Vista Unificada</h6>
+                                <small class="text-muted">Ve todas tus tareas en tu calendario personal</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button class="btn btn-primary btn-lg" onclick="connectCalendar()">
+                        <i class="fab fa-google me-2"></i>Conectar con Google Calendar
+                    </button>
+                    
+                    <div class="mt-4">
+                        <small class="text-muted">
+                            <i class="fas fa-shield-alt me-1"></i>
+                            Tus datos están seguros. Solo accedemos a tu calendario para sincronizar tareas.
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function connectCalendar() {
+    showAlert('Redirigiendo a Google para autorizar...', 'info');
+    
+    // En una implementación real, esto redirigiría a Google OAuth
+    fetch('/api/calendar/auth-url', {
+        method: 'GET'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.auth_url) {
+            window.location.href = data.auth_url;
+        } else {
+            showAlert('Error al generar URL de autorización', 'error');
+        }
+    })
+    .catch(error => {
+        showAlert('Error al conectar con Google Calendar', 'error');
+    });
+}
+
+function disconnectCalendar() {
+    if (confirm('¿Estás seguro que querés desconectar Google Calendar? Se perderán todas las sincronizaciones.')) {
+        fetch('/api/calendar/disconnect', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert(data.message, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showAlert(data.message, 'error');
+            }
+        })
+        .catch(error => {
+            showAlert('Error al desconectar Google Calendar', 'error');
+        });
+    }
+}
+
+function syncCalendar() {
+    showAlert('Sincronizando con Google Calendar...', 'info');
+    
+    fetch('/api/calendar/sync', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showAlert(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showAlert('Error al sincronizar con Google Calendar', 'error');
+    });
+}
+
+function openCalendarEvent(taskId) {
+    // Abrir evento en Google Calendar (simulado)
+    showAlert('Abriendo evento en Google Calendar...', 'info');
+}
+
+function viewSyncLog() {
+    // Mostrar registro de sincronización
+    showAlert('Función de registro de sincronización en desarrollo', 'info');
+}
+
+// Manejo del formulario de configuración
+document.getElementById('syncConfigForm')?.addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const config = {
+        auto_sync: formData.get('autoSync') === 'on',
+        sync_deadlines: formData.get('syncDeadlines') === 'on',
+        calendar_name: formData.get('calendarName')
+    };
+    
+    fetch('/api/calendar/config', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(config)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'success');
+        } else {
+            showAlert(data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showAlert('Error al guardar configuración', 'error');
+    });
+});
+
+// Actualizar tiempo de próxima sincronización
+setInterval(function() {
+    const nextSyncElement = document.getElementById('nextSyncTime');
+    if (nextSyncElement) {
+        // Simular countdown (en implementación real vendría del servidor)
+        const minutes = Math.floor(Math.random() * 10) + 1;
+        nextSyncElement.textContent = `En ${minutes} minutos`;
+    }
+}, 30000);
+</script>
+
+<style>
+.feature-item {
+    padding: 1rem;
+    border-radius: 8px;
+    background: #f8f9fa;
+    height: 100%;
+}
+
+.feature-item:hover {
+    background: #e9ecef;
+    transition: background 0.3s ease;
+}
+
+.alert {
+    border-radius: 12px;
+}
+
+.btn-lg {
+    padding: 12px 30px;
+    border-radius: 25px;
+}
+
+.card {
+    border-radius: 12px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+</style>
+{% endblock %}

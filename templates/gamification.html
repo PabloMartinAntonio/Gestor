@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+
+{% block title %}Gamificación - Puntos y Logros{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3">
+                    <i class="fas fa-trophy me-2"></i>Puntos y Logros
+                </h1>
+                <div class="btn-group">
+                    <button class="btn btn-outline-primary" onclick="refreshStats()">
+                        <i class="fas fa-sync-alt"></i> Actualizar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Perfil del Usuario -->
+    <div class="row mb-4">
+        <div class="col-lg-4">
+            <div class="card bg-gradient-primary text-white">
+                <div class="card-body text-center">
+                    <div class="avatar-lg mx-auto mb-3">
+                        <div class="avatar-title bg-white text-primary rounded-circle display-4">
+                            {{ current_user.username[0].upper() }}
+                        </div>
+                    </div>
+                    <h4>{{ current_user.username }}</h4>
+                    <p class="mb-0">Nivel {{ current_user.level }}</p>
+                    
+                    <!-- Barra de progreso al siguiente nivel -->
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between small">
+                            <span>{{ current_user.points }} puntos</span>
+                            <span>{{ next_level_points }} puntos</span>
+                        </div>
+                        <div class="progress mt-1" style="height: 8px;">
+                            <div class="progress-bar bg-warning" style="width: {{ level_progress }}%"></div>
+                        </div>
+                        <small class="d-block mt-1">{{ points_to_next_level }} puntos para el siguiente nivel</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-8">
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="card text-center h-100">
+                        <div class="card-body">
+                            <i class="fas fa-tasks text-primary fa-2x mb-2"></i>
+                            <h3 class="mb-1">{{ user_stats.total_tasks }}</h3>
+                            <small class="text-muted">Tareas Totales</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-center h-100">
+                        <div class="card-body">
+                            <i class="fas fa-check-circle text-success fa-2x mb-2"></i>
+                            <h3 class="mb-1">{{ user_stats.completed_tasks }}</h3>
+                            <small class="text-muted">Completadas</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-center h-100">
+                        <div class="card-body">
+                            <i class="fas fa-star text-warning fa-2x mb-2"></i>
+                            <h3 class="mb-1">{{ user_stats.achievements_count }}</h3>
+                            <small class="text-muted">Logros</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-center h-100">
+                        <div class="card-body">
+                            <i class="fas fa-users text-info fa-2x mb-2"></i>
+                            <h3 class="mb-1">{{ user_stats.groups_count }}</h3>
+                            <small class="text-muted">Grupos</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ranking de Usuarios -->
+    <div class="row mb-4">
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Ranking de Puntos</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Posición</th>
+                                    <th>Usuario</th>
+                                    <th>Nivel</th>
+                                    <th>Puntos</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for rank, user in leaderboard %}
+                                <tr class="{{ 'table-warning' if user.id == current_user.id else '' }}">
+                                    <td>
+                                        {% if rank == 1 %}
+                                        <i class="fas fa-trophy text-warning"></i>
+                                        {% elif rank == 2 %}
+                                        <i class="fas fa-medal text-secondary"></i>
+                                        {% elif rank == 3 %}
+                                        <i class="fas fa-medal text-warning"></i>
+                                        {% else %}
+                                        {{ rank }}
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="avatar-sm me-2">
+                                                <div class="avatar-title bg-primary rounded-circle">
+                                                    {{ user.username[0].upper() }}
+                                                </div>
+                                            </div>
+                                            {{ user.username }}
+                                            {% if user.id == current_user.id %}
+                                            <span class="badge bg-info ms-2">Vos</span>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-secondary">Nv. {{ user.level }}</span>
+                                    </td>
+                                    <td>
+                                        <strong>{{ user.points }}</strong>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Logros Recientes</h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_achievements %}
+                    {% for achievement in recent_achievements %}
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="achievement-icon me-3">
+                            <i class="fas {{ achievement.icon }} text-warning fa-2x"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-1">{{ achievement.name }}</h6>
+                            <small class="text-muted">{{ achievement.description }}</small>
+                            <br>
+                            <small class="text-success">
+                                <i class="fas fa-clock me-1"></i>
+                                {{ achievement.earned_at.strftime('%d/%m/%Y') }}
+                            </small>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div class="text-center text-muted">
+                        <i class="fas fa-star fa-2x mb-2"></i>
+                        <p>Aún no tenés logros. ¡Completá tareas para desbloquearlos!</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Todos los Logros -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Todos los Logros</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for achievement in all_achievements %}
+                        <div class="col-lg-4 col-md-6 mb-3">
+                            <div class="card achievement-card {{ 'unlocked' if achievement.is_earned else 'locked' }}">
+                                <div class="card-body text-center">
+                                    <div class="achievement-icon mb-3">
+                                        <i class="fas {{ achievement.icon }} fa-3x {{ 'text-warning' if achievement.is_earned else 'text-muted' }}"></i>
+                                        {% if achievement.is_earned %}
+                                        <i class="fas fa-check-circle text-success position-absolute"></i>
+                                        {% endif %}
+                                    </div>
+                                    <h6 class="{{ 'text-dark' if achievement.is_earned else 'text-muted' }}">
+                                        {{ achievement.name }}
+                                    </h6>
+                                    <p class="small {{ 'text-muted' if achievement.is_earned else 'text-secondary' }}">
+                                        {{ achievement.description }}
+                                    </p>
+                                    
+                                    {% if not achievement.is_earned %}
+                                    <div class="progress-info">
+                                        {% if achievement.tasks_required > 0 %}
+                                        <small class="text-muted">
+                                            Tareas: {{ achievement.current_tasks }}/{{ achievement.tasks_required }}
+                                        </small>
+                                        <div class="progress mt-1" style="height: 4px;">
+                                            <div class="progress-bar" style="width: {{ (achievement.current_tasks / achievement.tasks_required * 100) if achievement.tasks_required > 0 else 0 }}%"></div>
+                                        </div>
+                                        {% endif %}
+                                        
+                                        {% if achievement.points_required > 0 %}
+                                        <small class="text-muted d-block mt-1">
+                                            Requiere {{ achievement.points_required }} puntos
+                                        </small>
+                                        {% endif %}
+                                        
+                                        {% if achievement.level_required > 1 %}
+                                        <small class="text-muted d-block mt-1">
+                                            Requiere nivel {{ achievement.level_required }}
+                                        </small>
+                                        {% endif %}
+                                    </div>
+                                    {% else %}
+                                    <small class="text-success">
+                                        <i class="fas fa-calendar me-1"></i>
+                                        Desbloqueado el {{ achievement.earned_date.strftime('%d/%m/%Y') }}
+                                    </small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function refreshStats() {
+    location.reload();
+}
+
+// Animación para logros desbloqueados
+document.addEventListener('DOMContentLoaded', function() {
+    const unlockedCards = document.querySelectorAll('.achievement-card.unlocked');
+    unlockedCards.forEach((card, index) => {
+        setTimeout(() => {
+            card.style.animation = 'pulse 0.5s ease-in-out';
+        }, index * 100);
+    });
+});
+</script>
+
+<style>
+.avatar-lg {
+    width: 80px;
+    height: 80px;
+}
+
+.avatar-sm {
+    width: 32px;
+    height: 32px;
+}
+
+.avatar-title {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+}
+
+.achievement-card {
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.achievement-card.unlocked {
+    background: linear-gradient(135deg, #fff9c4 0%, #ffffff 100%);
+    border: 2px solid #ffc107;
+    box-shadow: 0 4px 8px rgba(255, 193, 7, 0.3);
+}
+
+.achievement-card.locked {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+}
+
+.achievement-card:hover {
+    transform: translateY(-2px);
+}
+
+.achievement-icon {
+    position: relative;
+}
+
+.achievement-icon .fa-check-circle {
+    top: -5px;
+    right: -5px;
+    font-size: 1.2rem;
+}
+
+.bg-gradient-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.progress {
+    border-radius: 10px;
+}
+
+.progress-bar {
+    border-radius: 10px;
+}
+</style>
+{% endblock %}

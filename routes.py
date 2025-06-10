@@ -1010,3 +1010,669 @@ def api_export_analytics_report():
             'success': False,
             'message': f'Error al exportar reporte: {str(e)}'
         })
+
+# Funciones de gamificación
+def calculate_points_for_task(task, completion_time_days=None):
+    """Calcular puntos por completar una tarea"""
+    base_points = 10
+    
+    # Puntos por prioridad
+    priority_multiplier = {'low': 1, 'medium': 1.5, 'high': 2}
+    points = base_points * priority_multiplier.get(task.priority, 1)
+    
+    # Bonificación por completar antes de tiempo
+    if completion_time_days and task.end_date:
+        days_early = (task.end_date - datetime.utcnow().date()).days
+        if days_early > 0:
+            points += days_early * 2
+    
+    return int(points)
+
+def check_and_award_achievements(user):
+    """Verificar y otorgar logros al usuario"""
+    from models import Achievement, UserAchievement
+    
+    # Obtener logros no obtenidos
+    earned_achievement_ids = [ua.achievement_id for ua in user.user_achievements]
+    available_achievements = Achievement.query.filter(
+        Achievement.is_active == True,
+        ~Achievement.id.in_(earned_achievement_ids)
+    ).all()
+    
+    new_achievements = []
+    
+    for achievement in available_achievements:
+        eligible = True
+        
+        # Verificar requisitos de puntos
+        if achievement.points_required > 0 and user.points < achievement.points_required:
+            eligible = False
+        
+        # Verificar requisitos de nivel
+        if achievement.level_required > user.level:
+            eligible = False
+        
+        # Verificar requisitos de tareas
+        if achievement.tasks_required > 0:
+            completed_tasks = Task.query.filter_by(
+                assigned_to_id=user.id, status='completed'
+            ).count()
+            if completed_tasks < achievement.tasks_required:
+                eligible = False
+        
+        if eligible:
+            user_achievement = UserAchievement(
+                user_id=user.id,
+                achievement_id=achievement.id
+            )
+            db.session.add(user_achievement)
+            new_achievements.append(achievement)
+    
+    if new_achievements:
+        db.session.commit()
+        # Crear notificaciones por logros
+        for achievement in new_achievements:
+            create_notification(
+                user.id,
+                f"¡Logro Desbloqueado!",
+                f"Has desbloqueado el logro '{achievement.name}': {achievement.description}",
+                'achievement'
+            )
+    
+    return new_achievements
+
+def update_user_level(user):
+    """Actualizar nivel del usuario basado en puntos"""
+    # Fórmula: Nivel = sqrt(puntos / 100) + 1
+    import math
+    new_level = int(math.sqrt(user.points / 100)) + 1
+    
+    if new_level > user.level:
+        old_level = user.level
+        user.level = new_level
+        db.session.commit()
+        
+        # Notificar subida de nivel
+        create_notification(
+            user.id,
+            f"¡Subiste de Nivel!",
+            f"¡Felicitaciones! Subiste del nivel {old_level} al nivel {new_level}",
+            'level_up'
+        )
+    
+    return user.level
+
+# Rutas de gamificación
+@app.route('/gamification')
+@login_required
+def gamification():
+    from models import Achievement, UserAchievement
+    
+    # Estadísticas del usuario
+    total_tasks = Task.query.filter_by(assigned_to_id=current_user.id).count()
+    completed_tasks = Task.query.filter_by(
+        assigned_to_id=current_user.id, status='completed'
+    ).count()
+    achievements_count = len(current_user.user_achievements)
+    groups_count = current_user.groups.count()
+    
+    user_stats = {
+        'total_tasks': total_tasks,
+        'completed_tasks': completed_tasks,
+        'achievements_count': achievements_count,
+        'groups_count': groups_count
+    }
+    
+    # Calcular progreso al siguiente nivel
+    next_level_points = ((current_user.level) ** 2) * 100
+    points_to_next_level = max(0, next_level_points - current_user.points)
+    level_progress = min(100, (current_user.points / next_level_points * 100)) if next_level_points > 0 else 100
+    
+    # Ranking de usuarios
+    users_ranking = User.query.order_by(User.points.desc()).limit(10).all()
+    leaderboard = [(i+1, user) for i, user in enumerate(users_ranking)]
+    
+    # Logros recientes
+    recent_achievements = db.session.query(UserAchievement, Achievement).join(
+        Achievement
+    ).filter(
+        UserAchievement.user_id == current_user.id
+    ).order_by(UserAchievement.earned_at.desc()).limit(5).all()
+    
+    recent_achievements = [
+        {
+            'name': ach.name,
+            'description': ach.description,
+            'icon': ach.icon,
+            'earned_at': ua.earned_at
+        }
+        for ua, ach in recent_achievements
+    ]
+    
+    # Todos los logros con estado
+    all_achievements = Achievement.query.filter_by(is_active=True).all()
+    earned_ids = [ua.achievement_id for ua in current_user.user_achievements]
+    
+    achievements_with_status = []
+    for achievement in all_achievements:
+        is_earned = achievement.id in earned_ids
+        
+        # Calcular progreso actual
+        current_tasks = 0
+        if achievement.tasks_required > 0:
+            current_tasks = Task.query.filter_by(
+                assigned_to_id=current_user.id, status='completed'
+            ).count()
+        
+        earned_date = None
+        if is_earned:
+            user_ach = next((ua for ua in current_user.user_achievements 
+                           if ua.achievement_id == achievement.id), None)
+            if user_ach:
+                earned_date = user_ach.earned_at
+        
+        achievements_with_status.append({
+            'id': achievement.id,
+            'name': achievement.name,
+            'description': achievement.description,
+            'icon': achievement.icon,
+            'points_required': achievement.points_required,
+            'tasks_required': achievement.tasks_required,
+            'level_required': achievement.level_required,
+            'is_earned': is_earned,
+            'current_tasks': current_tasks,
+            'earned_date': earned_date
+        })
+    
+    return render_template('gamification.html',
+                         user_stats=user_stats,
+                         next_level_points=next_level_points,
+                         points_to_next_level=points_to_next_level,
+                         level_progress=level_progress,
+                         leaderboard=leaderboard,
+                         recent_achievements=recent_achievements,
+                         all_achievements=achievements_with_status)
+
+# Rutas de grupos de trabajo
+@app.route('/groups')
+@login_required
+def groups():
+    from models import WorkGroup
+    
+    # Grupos donde es miembro
+    my_groups = current_user.groups.all()
+    
+    # Grupos creados por el usuario
+    created_groups = []
+    if current_user.can_create_groups or current_user.is_admin:
+        created_groups = WorkGroup.query.filter_by(created_by_id=current_user.id).all()
+    
+    # Invitaciones pendientes (simulado por ahora)
+    pending_invitations = []
+    
+    return render_template('groups.html',
+                         my_groups=my_groups,
+                         created_groups=created_groups,
+                         pending_invitations=pending_invitations)
+
+@app.route('/api/groups/create', methods=['POST'])
+@login_required
+def api_create_group():
+    if not (current_user.can_create_groups or current_user.is_admin):
+        return jsonify({'success': False, 'message': 'No tenés permisos para crear grupos'})
+    
+    try:
+        from models import WorkGroup
+        data = request.get_json()
+        
+        group = WorkGroup(
+            name=data['name'],
+            description=data.get('description', ''),
+            is_private=data.get('is_private', True),
+            created_by_id=current_user.id
+        )
+        
+        db.session.add(group)
+        db.session.flush()  # Para obtener el ID
+        
+        # Agregar al creador como miembro administrador
+        group.members.append(current_user)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Grupo "{group.name}" creado exitosamente'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': f'Error al crear grupo: {str(e)}'
+        })
+
+@app.route('/group/<int:group_id>')
+@login_required
+def group_detail(group_id):
+    from models import WorkGroup
+    group = WorkGroup.query.get_or_404(group_id)
+    
+    # Verificar acceso
+    if not group.is_member(current_user) and not current_user.is_admin:
+        flash('No tenés acceso a este grupo', 'error')
+        return redirect(url_for('groups'))
+    
+    # Tareas del grupo
+    group_tasks = Task.query.filter(
+        Task.assigned_to_id.in_([m.id for m in group.members])
+    ).order_by(Task.created_at.desc()).all()
+    
+    return render_template('group_detail.html', group=group, tasks=group_tasks)
+
+# Modificar la función de completar tareas para incluir gamificación
+@app.route('/api/complete_task/<int:task_id>', methods=['POST'])
+@login_required
+def api_complete_task(task_id):
+    task = Task.query.get_or_404(task_id)
+    
+    # Verificar permisos
+    if not current_user.is_admin and task.assigned_to_id != current_user.id:
+        return jsonify({'success': False, 'message': 'Acceso denegado'})
+    
+    if task.status == 'completed':
+        return jsonify({'success': False, 'message': 'La tarea ya está completada'})
+    
+    old_status = task.status
+    task.status = 'completed'
+    task.updated_at = datetime.utcnow()
+    
+    # Calcular puntos y otorgarlos
+    if task.assigned_to_id:
+        assigned_user = User.query.get(task.assigned_to_id)
+        if assigned_user:
+            completion_days = None
+            if task.start_date:
+                completion_days = (datetime.utcnow().date() - task.start_date).days
+            
+            points_earned = calculate_points_for_task(task, completion_days)
+            assigned_user.points += points_earned
+            
+            # Actualizar nivel
+            update_user_level(assigned_user)
+            
+            # Verificar logros
+            new_achievements = check_and_award_achievements(assigned_user)
+            
+            db.session.commit()
+            
+            # Notificar puntos ganados
+            create_notification(
+                assigned_user.id,
+                "¡Puntos Ganados!",
+                f"Ganaste {points_earned} puntos por completar '{task.title}'",
+                'points_earned'
+            )
+            
+            # Notificar cambio de estado
+            if old_status != 'completed':
+                notify_status_change(task, old_status, 'completed', current_user)
+            
+            achievement_msg = ""
+            if new_achievements:
+                achievement_msg = f" ¡También desbloqueaste {len(new_achievements)} logro(s)!"
+            
+            return jsonify({
+                'success': True,
+                'message': f'Tarea completada. +{points_earned} puntos{achievement_msg}',
+                'points_earned': points_earned,
+                'new_achievements': [ach.name for ach in new_achievements]
+            })
+    
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'Tarea completada'})
+
+# Modo offline - guardar acciones para sincronizar
+@app.route('/api/offline/store_action', methods=['POST'])
+@login_required
+def api_store_offline_action():
+    try:
+        from models import OfflineAction
+        import json
+        
+        data = request.get_json()
+        
+        offline_action = OfflineAction(
+            user_id=current_user.id,
+            action_type=data['action_type'],
+            action_data=json.dumps(data['action_data'])
+        )
+        
+        db.session.add(offline_action)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'action_id': offline_action.id})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+# Sincronización de acciones offline
+@app.route('/api/offline/sync', methods=['POST'])
+@login_required
+def api_sync_offline_actions():
+    try:
+        from models import OfflineAction
+        import json
+        
+        # Obtener acciones no sincronizadas
+        unsynced_actions = OfflineAction.query.filter_by(
+            user_id=current_user.id, synced=False
+        ).order_by(OfflineAction.created_at).all()
+        
+        synced_count = 0
+        
+        for action in unsynced_actions:
+            try:
+                action_data = json.loads(action.action_data)
+                
+                # Procesar según el tipo de acción
+                if action.action_type == 'update_task_status':
+                    task = Task.query.get(action_data['task_id'])
+                    if task and (current_user.is_admin or task.assigned_to_id == current_user.id):
+                        old_status = task.status
+                        task.status = action_data['status']
+                        task.updated_at = datetime.utcnow()
+                        
+                        # Si se completó offline, otorgar puntos
+                        if action_data['status'] == 'completed' and old_status != 'completed':
+                            if task.assigned_to_id == current_user.id:
+                                points_earned = calculate_points_for_task(task)
+                                current_user.points += points_earned
+                                update_user_level(current_user)
+                                check_and_award_achievements(current_user)
+                
+                elif action.action_type == 'create_task':
+                    if current_user.is_admin or current_user.can_assign_tasks:
+                        task = Task(
+                            title=action_data['title'],
+                            description=action_data.get('description', ''),
+                            priority=action_data.get('priority', 'medium'),
+                            assigned_to_id=action_data.get('assigned_to_id'),
+                            created_by_id=current_user.id
+                        )
+                        
+                        if action_data.get('start_date'):
+                            task.start_date = datetime.strptime(action_data['start_date'], '%Y-%m-%d').date()
+                        if action_data.get('end_date'):
+                            task.end_date = datetime.strptime(action_data['end_date'], '%Y-%m-%d').date()
+                        
+                        db.session.add(task)
+                
+                # Marcar como sincronizado
+                action.synced = True
+                action.synced_at = datetime.utcnow()
+                synced_count += 1
+                
+            except Exception as e:
+                print(f"Error sincronizando acción {action.id}: {e}")
+                continue
+        
+        current_user.last_sync = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Se sincronizaron {synced_count} acciones',
+            'synced_count': synced_count
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error en sincronización: {str(e)}'
+        })
+
+# Rutas para Google Calendar
+@app.route('/calendar')
+@login_required
+def calendar_integration():
+    # Estadísticas de sincronización
+    sync_stats = {
+        'synced_tasks': Task.query.filter_by(assigned_to_id=current_user.id).count(),
+        'calendar_events': Task.query.filter(
+            Task.assigned_to_id == current_user.id,
+            Task.end_date.isnot(None)
+        ).count(),
+        'pending_sync': 0
+    }
+    
+    # Tareas sincronizadas recientemente
+    recent_synced_tasks = Task.query.filter_by(
+        assigned_to_id=current_user.id
+    ).order_by(Task.updated_at.desc()).limit(5).all()
+    
+    return render_template('calendar_integration.html',
+                         sync_stats=sync_stats,
+                         recent_synced_tasks=recent_synced_tasks)
+
+@app.route('/api/calendar/auth-url')
+@login_required
+def api_calendar_auth_url():
+    # En una implementación real, generaría la URL de OAuth de Google
+    # Por ahora simularemos la conexión
+    return jsonify({
+        'auth_url': f'{request.url_root}api/calendar/callback?code=simulated_auth_code&user_id={current_user.id}'
+    })
+
+@app.route('/api/calendar/callback')
+@login_required
+def api_calendar_callback():
+    # Simular recepción del código de autorización
+    auth_code = request.args.get('code')
+    
+    if auth_code:
+        # En implementación real, intercambiaría el código por tokens
+        current_user.google_calendar_token = f"simulated_token_{current_user.id}"
+        current_user.last_sync = datetime.utcnow()
+        db.session.commit()
+        
+        flash('Google Calendar conectado exitosamente', 'success')
+        return redirect(url_for('calendar_integration'))
+    else:
+        flash('Error al conectar Google Calendar', 'error')
+        return redirect(url_for('calendar_integration'))
+
+@app.route('/api/calendar/disconnect', methods=['POST'])
+@login_required
+def api_calendar_disconnect():
+    current_user.google_calendar_token = None
+    current_user.last_sync = None
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Google Calendar desconectado exitosamente'
+    })
+
+@app.route('/api/calendar/sync', methods=['POST'])
+@login_required
+def api_calendar_sync():
+    if not current_user.google_calendar_token:
+        return jsonify({
+            'success': False,
+            'message': 'Google Calendar no está conectado'
+        })
+    
+    try:
+        # Simular sincronización con Google Calendar
+        tasks_to_sync = Task.query.filter(
+            Task.assigned_to_id == current_user.id,
+            Task.end_date.isnot(None)
+        ).all()
+        
+        synced_count = len(tasks_to_sync)
+        current_user.last_sync = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Se sincronizaron {synced_count} tareas con Google Calendar'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error al sincronizar: {str(e)}'
+        })
+
+@app.route('/api/calendar/config', methods=['POST'])
+@login_required
+def api_calendar_config():
+    try:
+        data = request.get_json()
+        # Guardar configuración (en implementación real se guardaría en base de datos)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Configuración de calendario guardada'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error al guardar configuración: {str(e)}'
+        })
+
+# Modificar Task model para soportar múltiples asignaciones
+@app.route('/api/tasks/<int:task_id>/assign_multiple', methods=['POST'])
+@login_required
+def api_assign_multiple_users(task_id):
+    if not (current_user.is_admin or current_user.can_assign_tasks):
+        return jsonify({'success': False, 'message': 'No tenés permisos para asignar tareas'})
+    
+    try:
+        from models import task_assignments
+        task = Task.query.get_or_404(task_id)
+        data = request.get_json()
+        user_ids = data.get('user_ids', [])
+        
+        # Limpiar asignaciones existentes
+        db.session.execute(
+            task_assignments.delete().where(task_assignments.c.task_id == task_id)
+        )
+        
+        # Agregar nuevas asignaciones
+        for user_id in user_ids:
+            user = User.query.get(user_id)
+            if user:
+                db.session.execute(
+                    task_assignments.insert().values(
+                        task_id=task_id,
+                        user_id=user_id,
+                        assigned_at=datetime.utcnow()
+                    )
+                )
+                
+                # Crear notificación
+                notify_task_assignment(task, user, current_user)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Tarea asignada a {len(user_ids)} usuarios'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': f'Error al asignar tarea: {str(e)}'
+        })
+
+# Service Worker para modo offline
+@app.route('/sw.js')
+def service_worker():
+    return app.send_static_file('js/sw.js')
+
+# API para obtener datos offline
+@app.route('/api/offline/data')
+@login_required
+def api_offline_data():
+    try:
+        # Datos necesarios para modo offline
+        user_tasks = Task.query.filter_by(assigned_to_id=current_user.id).all()
+        user_groups = current_user.groups.all()
+        
+        offline_data = {
+            'user': {
+                'id': current_user.id,
+                'username': current_user.username,
+                'points': current_user.points,
+                'level': current_user.level
+            },
+            'tasks': [{
+                'id': task.id,
+                'title': task.title,
+                'description': task.description,
+                'status': task.status,
+                'priority': task.priority,
+                'start_date': task.start_date.isoformat() if task.start_date else None,
+                'end_date': task.end_date.isoformat() if task.end_date else None,
+                'created_at': task.created_at.isoformat(),
+                'updated_at': task.updated_at.isoformat()
+            } for task in user_tasks],
+            'groups': [{
+                'id': group.id,
+                'name': group.name,
+                'description': group.description,
+                'is_private': group.is_private
+            } for group in user_groups],
+            'last_sync': datetime.utcnow().isoformat()
+        }
+        
+        return jsonify(offline_data)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Actualizar permisos de usuario
+@app.route('/api/users/<int:user_id>/permissions', methods=['POST'])
+@login_required
+def api_update_user_permissions(user_id):
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'message': 'Solo administradores pueden modificar permisos'})
+    
+    try:
+        user = User.query.get_or_404(user_id)
+        data = request.get_json()
+        
+        # No permitir que se quiten permisos a sí mismo si es el único admin
+        if user.id == current_user.id and user.is_admin:
+            admin_count = User.query.filter_by(is_admin=True).count()
+            if admin_count <= 1 and not data.get('is_admin', True):
+                return jsonify({
+                    'success': False,
+                    'message': 'No podés quitarte permisos de administrador siendo el único admin'
+                })
+        
+        user.can_assign_tasks = data.get('can_assign_tasks', False)
+        user.can_create_groups = data.get('can_create_groups', False)
+        
+        # Solo admin puede modificar otros admins
+        if 'is_admin' in data:
+            user.is_admin = data.get('is_admin', False)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Permisos de {user.username} actualizados exitosamente'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': f'Error al actualizar permisos: {str(e)}'
+        })
