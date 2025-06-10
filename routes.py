@@ -1198,7 +1198,6 @@ def gamification():
 @login_required
 def groups():
     from models import WorkGroup
-    from admin_db import admin_db
     
     # Grupos donde es miembro (solo sus grupos privados o públicos)
     my_groups = current_user.groups.all()
@@ -1209,17 +1208,6 @@ def groups():
         if current_user.is_admin:
             # El administrador puede ver todos los grupos
             created_groups = WorkGroup.query.all()
-            
-            # Registrar grupos privados en la base de datos de administración
-            for group in created_groups:
-                if group.is_private:
-                    admin_db.monitor_private_group(
-                        group.id, 
-                        group.name, 
-                        group.created_by_id, 
-                        len(group.members),
-                        f"Admin view - Last checked: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-                    )
         else:
             # Usuarios normales solo ven sus grupos creados
             created_groups = WorkGroup.query.filter_by(created_by_id=current_user.id).all()
@@ -1885,15 +1873,7 @@ def api_join_group_by_link(invite_token):
         group.members.append(current_user)
         db.session.commit()
         
-        # Actualizar registro en base de datos de administración
-        from admin_db import admin_db
-        admin_db.monitor_private_group(
-            group.id, 
-            group.name, 
-            group.created_by_id, 
-            len(group.members),
-            f"Nuevo miembro: {current_user.username} se unió via link"
-        )
+
         
         # Notificar al creador del grupo
         create_notification(
@@ -1989,23 +1969,9 @@ def admin_private_groups():
         return redirect(url_for('dashboard'))
     
     from models import WorkGroup
-    from admin_db import admin_db
     
     # Obtener todos los grupos privados
     private_groups = WorkGroup.query.filter_by(is_private=True).all()
-    
-    # Actualizar base de datos de administración
-    for group in private_groups:
-        admin_db.monitor_private_group(
-            group.id, 
-            group.name, 
-            group.created_by_id, 
-            len(group.members),
-            f"Admin review - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-        )
-    
-    # Obtener logs de administración recientes
-    admin_logs = admin_db.get_admin_logs(limit=20, filter_action='GROUP')
     
     # Estadísticas de grupos privados
     stats = {
@@ -2017,7 +1983,7 @@ def admin_private_groups():
     
     return render_template('admin_private_groups.html', 
                          private_groups=private_groups,
-                         admin_logs=admin_logs,
+                         admin_logs=[],
                          stats=stats)
 
 @app.route('/api/admin/groups/<int:group_id>/reset_password', methods=['POST'])
@@ -2028,7 +1994,6 @@ def api_admin_reset_group_password(group_id):
     
     try:
         from models import WorkGroup
-        from admin_db import admin_db
         import secrets
         import string
         
@@ -2046,15 +2011,7 @@ def api_admin_reset_group_password(group_id):
         
         db.session.commit()
         
-        # Registrar acción
-        admin_db.log_admin_action(
-            current_user.id,
-            current_user.username,
-            'RESET_GROUP_PASSWORD',
-            'group',
-            group_id,
-            f"Contraseña reseteada para grupo '{group.name}'"
-        )
+
         
         # Notificar al creador del grupo
         create_notification(
@@ -2083,21 +2040,12 @@ def api_admin_delete_group(group_id):
     
     try:
         from models import WorkGroup
-        from admin_db import admin_db
         
         group = WorkGroup.query.get_or_404(group_id)
         group_name = group.name
         member_count = len(group.members)
         
-        # Registrar acción antes de eliminar
-        admin_db.log_admin_action(
-            current_user.id,
-            current_user.username,
-            'DELETE_PRIVATE_GROUP',
-            'group',
-            group_id,
-            f"Eliminando grupo privado '{group_name}' con {member_count} miembros"
-        )
+
         
         # Notificar a todos los miembros
         for member in group.members:

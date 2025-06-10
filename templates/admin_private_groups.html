@@ -209,48 +209,28 @@
         </div>
     </div>
 
-    <!-- Logs de administración -->
+    <!-- Información adicional -->
     <div class="row mt-4">
         <div class="col-12">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0">Registro de Actividad Administrativa</h5>
+                    <h5 class="mb-0">Funciones de Administrador</h5>
                 </div>
                 <div class="card-body">
-                    {% if admin_logs %}
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Usuario</th>
-                                    <th>Acción</th>
-                                    <th>Objetivo</th>
-                                    <th>Detalles</th>
-                                    <th>Fecha</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for log in admin_logs %}
-                                <tr>
-                                    <td><strong>{{ log[0] }}</strong></td>
-                                    <td>
-                                        <span class="badge bg-secondary">{{ log[1] }}</span>
-                                    </td>
-                                    <td>{{ log[2] }} #{{ log[3] if log[3] else '-' }}</td>
-                                    <td>
-                                        <small>{{ log[4] if log[4] else '-' }}</small>
-                                    </td>
-                                    <td>
-                                        <small class="text-muted">{{ log[5] }}</small>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                    <div class="alert alert-warning">
+                        <h6 class="alert-heading">Capacidades del Administrador</h6>
+                        <ul class="mb-0">
+                            <li>Ver y gestionar todos los grupos privados del sistema</li>
+                            <li>Resetear contraseñas de grupos con generación automática</li>
+                            <li>Eliminar grupos y notificar automáticamente a todos los miembros</li>
+                            <li>Obtener links de invitación de cualquier grupo</li>
+                            <li>Acceso completo sin restricciones de privacidad</li>
+                        </ul>
                     </div>
-                    {% else %}
-                    <p class="text-muted">No hay actividad administrativa registrada.</p>
-                    {% endif %}
+                    <p class="text-muted">
+                        Como administrador, tenés control total sobre todos los grupos del sistema, 
+                        incluyendo aquellos marcados como privados por otros usuarios.
+                    </p>
                 </div>
             </div>
         </div>
