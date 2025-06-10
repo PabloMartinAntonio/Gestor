@@ -1979,3 +1979,144 @@ def api_regenerate_invite_link(group_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'message': str(e)})
+
+# Ruta para administración de grupos privados
+@app.route('/admin/private_groups')
+@login_required
+def admin_private_groups():
+    if not current_user.is_admin:
+        flash('Acceso denegado. Se requieren privilegios de administrador.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    from models import WorkGroup
+    from admin_db import admin_db
+    
+    # Obtener todos los grupos privados
+    private_groups = WorkGroup.query.filter_by(is_private=True).all()
+    
+    # Actualizar base de datos de administración
+    for group in private_groups:
+        admin_db.monitor_private_group(
+            group.id, 
+            group.name, 
+            group.created_by_id, 
+            len(group.members),
+            f"Admin review - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        )
+    
+    # Obtener logs de administración recientes
+    admin_logs = admin_db.get_admin_logs(limit=20, filter_action='GROUP')
+    
+    # Estadísticas de grupos privados
+    stats = {
+        'total_private_groups': len(private_groups),
+        'active_groups': len([g for g in private_groups if len(g.members) > 1]),
+        'single_member_groups': len([g for g in private_groups if len(g.members) == 1]),
+        'total_members': sum(len(g.members) for g in private_groups)
+    }
+    
+    return render_template('admin_private_groups.html', 
+                         private_groups=private_groups,
+                         admin_logs=admin_logs,
+                         stats=stats)
+
+@app.route('/api/admin/groups/<int:group_id>/reset_password', methods=['POST'])
+@login_required
+def api_admin_reset_group_password(group_id):
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'message': 'Acceso denegado'})
+    
+    try:
+        from models import WorkGroup
+        from admin_db import admin_db
+        import secrets
+        import string
+        
+        group = WorkGroup.query.get_or_404(group_id)
+        
+        # Generar nueva contraseña
+        alphabet = string.ascii_letters + string.digits
+        new_password = ''.join(secrets.choice(alphabet) for _ in range(8))
+        
+        # Actualizar contraseña
+        group.set_password(new_password)
+        
+        # Regenerar token de invitación por seguridad
+        group.generate_invite_token()
+        
+        db.session.commit()
+        
+        # Registrar acción
+        admin_db.log_admin_action(
+            current_user.id,
+            current_user.username,
+            'RESET_GROUP_PASSWORD',
+            'group',
+            group_id,
+            f"Contraseña reseteada para grupo '{group.name}'"
+        )
+        
+        # Notificar al creador del grupo
+        create_notification(
+            group.created_by_id,
+            'Contraseña del Grupo Reseteada',
+            f'Un administrador reseteó la contraseña del grupo "{group.name}"',
+            'group_password_reset'
+        )
+        
+        return jsonify({
+            'success': True,
+            'new_password': new_password,
+            'message': f'Contraseña reseteada para grupo "{group.name}"',
+            'invite_link': group.get_invite_link(request.url_root.rstrip('/'))
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/api/admin/groups/<int:group_id>/delete', methods=['DELETE'])
+@login_required
+def api_admin_delete_group(group_id):
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'message': 'Acceso denegado'})
+    
+    try:
+        from models import WorkGroup
+        from admin_db import admin_db
+        
+        group = WorkGroup.query.get_or_404(group_id)
+        group_name = group.name
+        member_count = len(group.members)
+        
+        # Registrar acción antes de eliminar
+        admin_db.log_admin_action(
+            current_user.id,
+            current_user.username,
+            'DELETE_PRIVATE_GROUP',
+            'group',
+            group_id,
+            f"Eliminando grupo privado '{group_name}' con {member_count} miembros"
+        )
+        
+        # Notificar a todos los miembros
+        for member in group.members:
+            create_notification(
+                member.id,
+                'Grupo Eliminado',
+                f'El grupo "{group_name}" fue eliminado por un administrador',
+                'group_deleted'
+            )
+        
+        # Eliminar grupo
+        db.session.delete(group)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Grupo "{group_name}" eliminado exitosamente'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)})

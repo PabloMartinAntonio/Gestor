@@ -1,0 +1,480 @@
+{% extends "base.html" %}
+
+{% block title %}Administración de Grupos Privados{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3">
+                    <i class="fas fa-shield-alt me-2"></i>Administración de Grupos Privados
+                </h1>
+                <div class="btn-group">
+                    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Panel Admin
+                    </a>
+                    <button class="btn btn-info" onclick="exportGroupsReport()">
+                        <i class="fas fa-download"></i> Exportar Reporte
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estadísticas de grupos privados -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center border-primary">
+                <div class="card-body">
+                    <h2 class="text-primary mb-1">{{ stats.total_private_groups }}</h2>
+                    <p class="mb-0 text-muted">Grupos Privados Total</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-success">
+                <div class="card-body">
+                    <h2 class="text-success mb-1">{{ stats.active_groups }}</h2>
+                    <p class="mb-0 text-muted">Grupos Activos</p>
+                    <small class="text-muted">(+1 miembro)</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-warning">
+                <div class="card-body">
+                    <h2 class="text-warning mb-1">{{ stats.single_member_groups }}</h2>
+                    <p class="mb-0 text-muted">Grupos Solitarios</p>
+                    <small class="text-muted">(solo creador)</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-info">
+                <div class="card-body">
+                    <h2 class="text-info mb-1">{{ stats.total_members }}</h2>
+                    <p class="mb-0 text-muted">Total Miembros</p>
+                    <small class="text-muted">en grupos privados</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros y búsqueda -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title">Filtros de Búsqueda</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <input type="text" class="form-control" id="searchGroups" placeholder="Buscar grupos..." onkeyup="filterGroups()">
+                        </div>
+                        <div class="col-md-6">
+                            <select class="form-select" id="filterStatus" onchange="filterGroups()">
+                                <option value="">Todos los grupos</option>
+                                <option value="active">Solo activos (+1 miembro)</option>
+                                <option value="single">Solo creador</option>
+                                <option value="large">Grupos grandes (+10 miembros)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="alert alert-info">
+                <h6 class="alert-heading">Información de Administrador</h6>
+                <small>
+                    Como administrador podés ver, editar y gestionar todos los grupos privados del sistema.
+                    Los cambios se registran en la base de datos SQLite de administración.
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista de grupos privados -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Grupos Privados Registrados</h5>
+                </div>
+                <div class="card-body">
+                    {% if private_groups %}
+                    <div class="table-responsive">
+                        <table class="table table-striped" id="groupsTable">
+                            <thead>
+                                <tr>
+                                    <th>Grupo</th>
+                                    <th>Creador</th>
+                                    <th>Miembros</th>
+                                    <th>Descripción</th>
+                                    <th>Fecha Creación</th>
+                                    <th>Estado</th>
+                                    <th>Acciones Admin</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for group in private_groups %}
+                                <tr class="group-row" data-group-id="{{ group.id }}" data-members="{{ group.members|length }}" data-name="{{ group.name.lower() }}">
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="avatar-sm me-2">
+                                                <div class="avatar-title bg-dark rounded-circle">
+                                                    <i class="fas fa-shield-alt text-white"></i>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <strong>{{ group.name }}</strong>
+                                                <br>
+                                                <small class="text-muted">ID: {{ group.id }}</small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div>
+                                            <strong>{{ group.created_by.username }}</strong>
+                                            <br>
+                                            <small class="text-muted">{{ group.created_by.email }}</small>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="text-center">
+                                            <span class="badge bg-primary fs-6">{{ group.members|length }}</span>
+                                            <br>
+                                            <small class="text-muted">/ {{ group.max_members }} max</small>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div style="max-width: 200px;">
+                                            {% if group.description %}
+                                            <span>{{ group.description[:50] }}{% if group.description|length > 50 %}...{% endif %}</span>
+                                            {% else %}
+                                            <em class="text-muted">Sin descripción</em>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div>
+                                            {{ group.created_at.strftime('%d/%m/%Y') }}
+                                            <br>
+                                            <small class="text-muted">{{ group.created_at.strftime('%H:%M') }}</small>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if group.members|length > 1 %}
+                                        <span class="badge bg-success">Activo</span>
+                                        {% elif group.members|length == 1 %}
+                                        <span class="badge bg-warning">Solo Creador</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">Vacío</span>
+                                        {% endif %}
+                                        
+                                        {% if group.members|length >= group.max_members %}
+                                        <br><span class="badge bg-secondary mt-1">Lleno</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group-vertical btn-group-sm">
+                                            <button class="btn btn-outline-primary" onclick="viewGroupDetails({{ group.id }}, '{{ group.name }}')">
+                                                <i class="fas fa-eye"></i> Ver Detalles
+                                            </button>
+                                            <button class="btn btn-outline-warning" onclick="resetGroupPassword({{ group.id }}, '{{ group.name }}')">
+                                                <i class="fas fa-key"></i> Reset Pass
+                                            </button>
+                                            <button class="btn btn-outline-info" onclick="getInviteLink({{ group.id }})">
+                                                <i class="fas fa-link"></i> Link
+                                            </button>
+                                            <button class="btn btn-outline-danger" onclick="deleteGroup({{ group.id }}, '{{ group.name }}')">
+                                                <i class="fas fa-trash"></i> Eliminar
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-shield-alt fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No hay grupos privados registrados</h5>
+                        <p class="text-muted">Los grupos privados aparecerán aquí cuando los usuarios los creen.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logs de administración -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Registro de Actividad Administrativa</h5>
+                </div>
+                <div class="card-body">
+                    {% if admin_logs %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Usuario</th>
+                                    <th>Acción</th>
+                                    <th>Objetivo</th>
+                                    <th>Detalles</th>
+                                    <th>Fecha</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in admin_logs %}
+                                <tr>
+                                    <td><strong>{{ log[0] }}</strong></td>
+                                    <td>
+                                        <span class="badge bg-secondary">{{ log[1] }}</span>
+                                    </td>
+                                    <td>{{ log[2] }} #{{ log[3] if log[3] else '-' }}</td>
+                                    <td>
+                                        <small>{{ log[4] if log[4] else '-' }}</small>
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">{{ log[5] }}</small>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No hay actividad administrativa registrada.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para detalles del grupo -->
+<div class="modal fade" id="groupDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Detalles del Grupo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="groupDetailsContent">
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Cargando...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para link de invitación -->
+<div class="modal fade" id="inviteLinkModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Link de Invitación</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="inviteLinkContent">
+                <!-- Content will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function filterGroups() {
+    const searchTerm = document.getElementById('searchGroups').value.toLowerCase();
+    const statusFilter = document.getElementById('filterStatus').value;
+    const rows = document.querySelectorAll('.group-row');
+    
+    rows.forEach(row => {
+        const groupName = row.dataset.name;
+        const memberCount = parseInt(row.dataset.members);
+        let showRow = true;
+        
+        // Filtro de texto
+        if (searchTerm && !groupName.includes(searchTerm)) {
+            showRow = false;
+        }
+        
+        // Filtro de estado
+        if (statusFilter) {
+            switch (statusFilter) {
+                case 'active':
+                    if (memberCount <= 1) showRow = false;
+                    break;
+                case 'single':
+                    if (memberCount !== 1) showRow = false;
+                    break;
+                case 'large':
+                    if (memberCount < 10) showRow = false;
+                    break;
+            }
+        }
+        
+        row.style.display = showRow ? '' : 'none';
+    });
+}
+
+function viewGroupDetails(groupId, groupName) {
+    const modal = new bootstrap.Modal(document.getElementById('groupDetailsModal'));
+    document.querySelector('#groupDetailsModal .modal-title').textContent = `Detalles: ${groupName}`;
+    
+    // Aquí cargarías los detalles completos del grupo
+    const content = `
+        <div class="alert alert-info">
+            <h6>Información del Grupo</h6>
+            <p>ID del Grupo: ${groupId}</p>
+            <p>Acciones disponibles para administrador:</p>
+            <ul>
+                <li>Ver todos los miembros</li>
+                <li>Resetear contraseña</li>
+                <li>Obtener link de invitación</li>
+                <li>Eliminar grupo</li>
+            </ul>
+        </div>
+    `;
+    
+    document.getElementById('groupDetailsContent').innerHTML = content;
+    modal.show();
+}
+
+function resetGroupPassword(groupId, groupName) {
+    if (confirm(`¿Estás seguro que querés resetear la contraseña del grupo "${groupName}"? Se generará una nueva contraseña y link de invitación.`)) {
+        fetch(`/api/admin/groups/${groupId}/reset_password`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert(`Nueva contraseña para "${groupName}": ${data.new_password}`, 'success');
+                showAlert(`Nuevo link: ${data.invite_link}`, 'info');
+            } else {
+                showAlert(data.message, 'error');
+            }
+        })
+        .catch(error => {
+            showAlert('Error al resetear contraseña', 'error');
+        });
+    }
+}
+
+function getInviteLink(groupId) {
+    fetch(`/api/groups/${groupId}/invite-link`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const modal = new bootstrap.Modal(document.getElementById('inviteLinkModal'));
+                document.getElementById('inviteLinkContent').innerHTML = `
+                    <div class="mb-3">
+                        <label class="form-label">Link de Invitación:</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" value="${data.invite_link}" readonly>
+                            <button class="btn btn-outline-secondary" onclick="copyToClipboard('${data.invite_link}')">
+                                <i class="fas fa-copy"></i> Copiar
+                            </button>
+                        </div>
+                    </div>
+                    <small class="text-muted">Este link permite unirse al grupo con la contraseña correspondiente.</small>
+                `;
+                modal.show();
+            } else {
+                showAlert(data.message, 'error');
+            }
+        })
+        .catch(error => {
+            showAlert('Error al obtener link', 'error');
+        });
+}
+
+function deleteGroup(groupId, groupName) {
+    if (confirm(`¿ESTÁS SEGURO que querés ELIMINAR el grupo "${groupName}"? Esta acción NO se puede deshacer y todos los miembros serán notificados.`)) {
+        // Segunda confirmación
+        if (confirm(`Confirmación final: Se eliminará permanentemente el grupo "${groupName}" y se notificará a todos sus miembros.`)) {
+            fetch(`/api/admin/groups/${groupId}/delete`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    setTimeout(() => location.reload(), 2000);
+                } else {
+                    showAlert(data.message, 'error');
+                }
+            })
+            .catch(error => {
+                showAlert('Error al eliminar grupo', 'error');
+            });
+        }
+    }
+}
+
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text);
+    showAlert('Link copiado al portapapeles', 'success');
+}
+
+function exportGroupsReport() {
+    showAlert('Funcionalidad de exportación en desarrollo', 'info');
+}
+</script>
+
+<style>
+.avatar-sm {
+    width: 40px;
+    height: 40px;
+}
+
+.avatar-title {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+}
+
+.btn-group-vertical .btn {
+    margin-bottom: 2px;
+}
+
+.btn-group-vertical .btn:last-child {
+    margin-bottom: 0;
+}
+
+.card {
+    transition: transform 0.2s ease;
+}
+
+.card:hover {
+    transform: translateY(-1px);
+}
+
+.table th {
+    border-top: none;
+    font-weight: 600;
+    color: #495057;
+}
+
+.group-row:hover {
+    background-color: rgba(0, 123, 255, 0.05);
+}
+</style>
+{% endblock %}
