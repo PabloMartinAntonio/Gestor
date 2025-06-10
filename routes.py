@@ -1,5 +1,5 @@
 from datetime import datetime
-from flask import render_template, request, redirect, url_for, flash, jsonify
+from flask import render_template, request, redirect, url_for, flash, jsonify, session
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from app import app, db
@@ -1198,14 +1198,31 @@ def gamification():
 @login_required
 def groups():
     from models import WorkGroup
+    from admin_db import admin_db
     
-    # Grupos donde es miembro
+    # Grupos donde es miembro (solo sus grupos privados o públicos)
     my_groups = current_user.groups.all()
     
     # Grupos creados por el usuario
     created_groups = []
     if current_user.can_create_groups or current_user.is_admin:
-        created_groups = WorkGroup.query.filter_by(created_by_id=current_user.id).all()
+        if current_user.is_admin:
+            # El administrador puede ver todos los grupos
+            created_groups = WorkGroup.query.all()
+            
+            # Registrar grupos privados en la base de datos de administración
+            for group in created_groups:
+                if group.is_private:
+                    admin_db.monitor_private_group(
+                        group.id, 
+                        group.name, 
+                        group.created_by_id, 
+                        len(group.members),
+                        f"Admin view - Last checked: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+                    )
+        else:
+            # Usuarios normales solo ven sus grupos creados
+            created_groups = WorkGroup.query.filter_by(created_by_id=current_user.id).all()
     
     # Invitaciones pendientes (simulado por ahora)
     pending_invitations = []
@@ -1856,13 +1873,27 @@ def api_join_group_by_link(invite_token):
         
         # Verificar contraseña si el grupo es privado
         if group.is_private and group.password_hash:
-            password = request.json.get('password')
-            if not password or not group.check_password(password):
-                return jsonify({'success': False, 'message': 'Contraseña incorrecta'})
+            try:
+                data = request.get_json() or {}
+                password = data.get('password')
+                if not password or not group.check_password(password):
+                    return jsonify({'success': False, 'message': 'Contraseña incorrecta'})
+            except:
+                return jsonify({'success': False, 'message': 'Contraseña requerida'})
         
         # Agregar usuario al grupo
         group.members.append(current_user)
         db.session.commit()
+        
+        # Actualizar registro en base de datos de administración
+        from admin_db import admin_db
+        admin_db.monitor_private_group(
+            group.id, 
+            group.name, 
+            group.created_by_id, 
+            len(group.members),
+            f"Nuevo miembro: {current_user.username} se unió via link"
+        )
         
         # Notificar al creador del grupo
         create_notification(

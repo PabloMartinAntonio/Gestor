@@ -446,6 +446,21 @@ function regenerateInviteLink(groupId) {
     }
 }
 
+function togglePasswordSection() {
+    const isPrivateCheckbox = document.getElementById('isPrivate');
+    const passwordSection = document.getElementById('passwordSection');
+    const passwordInput = document.getElementById('groupPassword');
+    
+    if (isPrivateCheckbox.checked) {
+        passwordSection.style.display = 'block';
+        passwordInput.required = true;
+    } else {
+        passwordSection.style.display = 'none';
+        passwordInput.required = false;
+        passwordInput.value = '';
+    }
+}
+
 // Manejo del formulario de creación de grupo
 document.getElementById('createGroupForm').addEventListener('submit', function(e) {
     e.preventDefault();
@@ -454,7 +469,10 @@ document.getElementById('createGroupForm').addEventListener('submit', function(e
     const data = {
         name: formData.get('name'),
         description: formData.get('description'),
-        is_private: formData.get('is_private') === 'on'
+        is_private: formData.get('is_private') === 'on',
+        password: formData.get('password'),
+        max_members: parseInt(formData.get('max_members')),
+        allow_member_invite: formData.get('allow_member_invite') === 'on'
     };
     
     fetch('/api/groups/create', {
