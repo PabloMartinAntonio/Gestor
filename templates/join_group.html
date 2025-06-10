@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}Unirse al Grupo - {{ group.name }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header text-center bg-primary text-white">
+                    <h4><i class="fas fa-users me-2"></i>Invitación a Grupo</h4>
+                </div>
+                <div class="card-body">
+                    <!-- Información del grupo -->
+                    <div class="text-center mb-4">
+                        <div class="group-avatar mx-auto mb-3">
+                            <i class="fas fa-users fa-3x text-primary"></i>
+                        </div>
+                        <h3>{{ group.name }}</h3>
+                        {% if group.description %}
+                        <p class="text-muted">{{ group.description }}</p>
+                        {% endif %}
+                        
+                        <div class="row text-center">
+                            <div class="col">
+                                <small class="text-muted">
+                                    <i class="fas fa-user me-1"></i>
+                                    {{ group.members|length }}/{{ group.max_members }} miembros
+                                </small>
+                            </div>
+                            <div class="col">
+                                <small class="text-muted">
+                                    <i class="fas fa-calendar me-1"></i>
+                                    Creado {{ group.created_at.strftime('%d/%m/%Y') }}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Información del creador -->
+                    <div class="alert alert-info">
+                        <small>
+                            <i class="fas fa-info-circle me-1"></i>
+                            Te invitó: <strong>{{ group.created_by.username }}</strong>
+                        </small>
+                    </div>
+
+                    <!-- Formulario para unirse -->
+                    <form id="joinGroupForm">
+                        {% if group.is_private and group.password_hash %}
+                        <div class="mb-3">
+                            <label for="groupPassword" class="form-label">
+                                <i class="fas fa-lock me-1"></i>Contraseña del Grupo
+                            </label>
+                            <input type="password" class="form-control" id="groupPassword" name="password" required>
+                            <div class="form-text">Este grupo es privado y requiere contraseña para unirse.</div>
+                        </div>
+                        {% endif %}
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-user-plus me-2"></i>Unirse al Grupo
+                            </button>
+                            <a href="{{ url_for('groups') }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left me-2"></i>Cancelar
+                            </a>
+                        </div>
+                    </form>
+
+                    <!-- Información adicional -->
+                    <div class="mt-4">
+                        <small class="text-muted">
+                            <i class="fas fa-shield-alt me-1"></i>
+                            Al unirte al grupo, podrás participar en las tareas y colaborar con otros miembros.
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('joinGroupForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = {};
+    
+    // Obtener contraseña si es requerida
+    if (document.getElementById('groupPassword')) {
+        data.password = formData.get('password');
+    }
+    
+    // Deshabilitar botón mientras se procesa
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Uniéndose...';
+    
+    fetch('/api/group/join/{{ invite_token }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'success');
+            // Redirigir al grupo después de unirse
+            setTimeout(() => {
+                window.location.href = '/group/' + data.group_id;
+            }, 1500);
+        } else {
+            showAlert(data.message, 'error');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+        }
+    })
+    .catch(error => {
+        showAlert('Error al unirse al grupo', 'error');
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    });
+});
+</script>
+
+<style>
+.group-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
+
+.card {
+    border: none;
+    border-radius: 15px;
+}
+
+.card-header {
+    border-radius: 15px 15px 0 0 !important;
+}
+
+.btn-lg {
+    padding: 12px 24px;
+    font-size: 1.1rem;
+}
+
+.alert {
+    border-radius: 10px;
+}
+
+.form-control {
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.form-control:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+</style>
+{% endblock %}

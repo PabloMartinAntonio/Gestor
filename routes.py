@@ -1805,3 +1805,146 @@ def api_reset_user_password(user_id):
         
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
+
+# Rutas para sistema de invitaciones por link
+@app.route('/group/join/<invite_token>')
+def join_group_by_link(invite_token):
+    """Página para unirse a un grupo por link de invitación"""
+    from models import WorkGroup
+    
+    group = WorkGroup.query.filter_by(invite_token=invite_token).first()
+    if not group:
+        flash('Link de invitación inválido o expirado', 'error')
+        return redirect(url_for('groups'))
+    
+    # Si el usuario no está autenticado, redirigir al login
+    if not current_user.is_authenticated:
+        session['join_group_token'] = invite_token
+        flash('Iniciá sesión para unirte al grupo', 'info')
+        return redirect(url_for('login'))
+    
+    # Si ya es miembro, redirigir al grupo
+    if group.is_member(current_user):
+        flash(f'Ya sos miembro del grupo "{group.name}"', 'info')
+        return redirect(url_for('group_detail', group_id=group.id))
+    
+    # Verificar si el grupo está lleno
+    if len(group.members) >= group.max_members:
+        flash('El grupo está lleno', 'error')
+        return redirect(url_for('groups'))
+    
+    return render_template('join_group.html', group=group, invite_token=invite_token)
+
+@app.route('/api/group/join/<invite_token>', methods=['POST'])
+@login_required
+def api_join_group_by_link(invite_token):
+    """API para unirse a un grupo por link de invitación"""
+    from models import WorkGroup
+    
+    try:
+        group = WorkGroup.query.filter_by(invite_token=invite_token).first()
+        if not group:
+            return jsonify({'success': False, 'message': 'Link de invitación inválido'})
+        
+        # Verificar si ya es miembro
+        if group.is_member(current_user):
+            return jsonify({'success': False, 'message': 'Ya sos miembro de este grupo'})
+        
+        # Verificar si el grupo está lleno
+        if len(group.members) >= group.max_members:
+            return jsonify({'success': False, 'message': 'El grupo está lleno'})
+        
+        # Verificar contraseña si el grupo es privado
+        if group.is_private and group.password_hash:
+            password = request.json.get('password')
+            if not password or not group.check_password(password):
+                return jsonify({'success': False, 'message': 'Contraseña incorrecta'})
+        
+        # Agregar usuario al grupo
+        group.members.append(current_user)
+        db.session.commit()
+        
+        # Notificar al creador del grupo
+        create_notification(
+            group.created_by_id,
+            'Nuevo Miembro',
+            f'{current_user.username} se unió al grupo "{group.name}"',
+            'group_member_joined'
+        )
+        
+        # Notificar al usuario
+        create_notification(
+            current_user.id,
+            'Te Uniste al Grupo',
+            f'Te uniste exitosamente al grupo "{group.name}"',
+            'group_joined'
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': f'Te uniste exitosamente al grupo "{group.name}"',
+            'group_id': group.id
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/api/groups/<int:group_id>/invite-link')
+@login_required
+def api_get_invite_link(group_id):
+    """Obtener link de invitación del grupo"""
+    from models import WorkGroup
+    
+    try:
+        group = WorkGroup.query.get_or_404(group_id)
+        
+        # Verificar permisos
+        if not group.is_admin(current_user):
+            return jsonify({'success': False, 'message': 'No tenés permisos para obtener el link de invitación'})
+        
+        # Generar nuevo token si no existe
+        if not group.invite_token:
+            group.generate_invite_token()
+            db.session.commit()
+        
+        invite_link = group.get_invite_link(request.url_root.rstrip('/'))
+        
+        return jsonify({
+            'success': True,
+            'invite_link': invite_link,
+            'token': group.invite_token
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/api/groups/<int:group_id>/regenerate-link', methods=['POST'])
+@login_required
+def api_regenerate_invite_link(group_id):
+    """Regenerar link de invitación del grupo"""
+    from models import WorkGroup
+    
+    try:
+        group = WorkGroup.query.get_or_404(group_id)
+        
+        # Verificar permisos
+        if not group.is_admin(current_user):
+            return jsonify({'success': False, 'message': 'No tenés permisos para regenerar el link de invitación'})
+        
+        # Generar nuevo token
+        group.generate_invite_token()
+        db.session.commit()
+        
+        invite_link = group.get_invite_link(request.url_root.rstrip('/'))
+        
+        return jsonify({
+            'success': True,
+            'message': 'Link de invitación regenerado exitosamente',
+            'invite_link': invite_link,
+            'token': group.invite_token
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)})

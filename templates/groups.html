@@ -239,12 +239,31 @@
                     </div>
                     <div class="mb-3">
                         <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="isPrivate" name="is_private" checked>
+                            <input class="form-check-input" type="checkbox" id="isPrivate" name="is_private" checked onchange="togglePasswordSection()">
                             <label class="form-check-label" for="isPrivate">
                                 Grupo Privado
                             </label>
                         </div>
-                        <div class="form-text">Los grupos privados requieren invitación para unirse.</div>
+                        <div class="form-text">Los grupos privados requieren contraseña para unirse.</div>
+                    </div>
+                    <div class="mb-3" id="passwordSection">
+                        <label for="groupPassword" class="form-label">Contraseña del Grupo *</label>
+                        <input type="password" class="form-control" id="groupPassword" name="password" required>
+                        <div class="form-text">Contraseña para proteger el acceso al grupo.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="maxMembers" class="form-label">Máximo de Miembros</label>
+                        <input type="number" class="form-control" id="maxMembers" name="max_members" value="50" min="2" max="200">
+                        <div class="form-text">Número máximo de miembros permitidos.</div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="allowMemberInvite" name="allow_member_invite">
+                            <label class="form-check-label" for="allowMemberInvite">
+                                Permitir a miembros invitar otros
+                            </label>
+                            <div class="form-text">Los miembros pueden generar links de invitación.</div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -327,26 +346,102 @@ function rejectInvitation(invitationId) {
 }
 
 function inviteToGroup(groupId) {
-    // Implementar modal de invitación
-    const email = prompt('Ingresá el email del usuario a invitar:');
-    if (email && email.trim()) {
-        fetch(`/api/groups/${groupId}/invite`, {
+    // Obtener link de invitación
+    fetch(`/api/groups/${groupId}/invite-link`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showInviteLinkModal(data.invite_link, groupId);
+            } else {
+                showAlert(data.message, 'error');
+            }
+        })
+        .catch(error => {
+            showAlert('Error al obtener link de invitación', 'error');
+        });
+}
+
+function showInviteLinkModal(inviteLink, groupId) {
+    const modalHtml = `
+        <div class="modal fade" id="inviteLinkModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="fas fa-link me-2"></i>Link de Invitación
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            Compartí este link para que otros usuarios se unan al grupo.
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Link de Invitación:</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="inviteLinkInput" value="${inviteLink}" readonly>
+                                <button class="btn btn-outline-secondary" onclick="copyInviteLink()">
+                                    <i class="fas fa-copy"></i> Copiar
+                                </button>
+                            </div>
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-warning" onclick="regenerateInviteLink(${groupId})">
+                                <i class="fas fa-sync-alt me-2"></i>Regenerar Link
+                            </button>
+                        </div>
+                        <small class="text-muted">
+                            <i class="fas fa-shield-alt me-1"></i>
+                            Si regenerás el link, el anterior dejará de funcionar.
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remover modal existente si existe
+    const existingModal = document.getElementById('inviteLinkModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Agregar nuevo modal al DOM
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Mostrar modal
+    const modal = new bootstrap.Modal(document.getElementById('inviteLinkModal'));
+    modal.show();
+}
+
+function copyInviteLink() {
+    const input = document.getElementById('inviteLinkInput');
+    input.select();
+    input.setSelectionRange(0, 99999);
+    navigator.clipboard.writeText(input.value);
+    showAlert('Link copiado al portapapeles', 'success');
+}
+
+function regenerateInviteLink(groupId) {
+    if (confirm('¿Estás seguro? El link anterior dejará de funcionar.')) {
+        fetch(`/api/groups/${groupId}/regenerate-link`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ email: email.trim() })
+            }
         })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
+                document.getElementById('inviteLinkInput').value = data.invite_link;
                 showAlert(data.message, 'success');
             } else {
                 showAlert(data.message, 'error');
             }
         })
         .catch(error => {
-            showAlert('Error al enviar la invitación', 'error');
+            showAlert('Error al regenerar link', 'error');
         });
     }
 }
