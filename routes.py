@@ -12,12 +12,40 @@ from googleapiclient.discovery import build
 import os
 import pathlib
 
+def get_calendar_service():
+    if 'credentials' not in session:
+        return None
+
+    creds_data = session['credentials']
+    creds = Credentials(
+        token=creds_data['token'],
+        refresh_token=creds_data.get('refresh_token'),
+        token_uri=creds_data['token_uri'],
+        client_id=creds_data['client_id'],
+        client_secret=creds_data['client_secret'],
+        scopes=creds_data['scopes']
+    )
+    service = build('calendar', 'v3', credentials=creds)
+    return service
+
+
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"  # Solo para desarrollo local
 
 GOOGLE_CLIENT_SECRETS_FILE = os.path.join(pathlib.Path(__file__).parent, "client_secret.json")
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 REDIRECT_URI = "http://localhost:5000/oauth2callback"
+
+client_config = {
+    "web": {
+        "client_id": os.environ.get("GOOGLE_CLIENT_ID"),
+        "client_secret": os.environ.get("GOOGLE_CLIENT_SECRET"),
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "redirect_uris": [os.environ.get("REDIRECT_URI")],
+    }
+}
+
 
 @app.route('/')
 def index():
@@ -27,6 +55,49 @@ def index():
         else:
             return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
+
+@app.route('/authorize')
+@login_required
+def authorize():
+    flow = Flow.from_client_config(
+        client_config,
+        scopes=SCOPES,
+        redirect_uri=os.environ.get("REDIRECT_URI")
+    )
+    authorization_url, state = flow.authorization_url(
+        access_type='offline',
+        include_granted_scopes='true',
+        prompt='consent'
+    )
+    session['state'] = state
+    return redirect(authorization_url)
+
+ @app.route('/oauth2callback')
+@login_required
+def oauth2callback():
+    state = session.get('state')
+    flow = Flow.from_client_config(
+        client_config,
+        scopes=SCOPES,
+        state=state,
+        redirect_uri=os.environ.get("REDIRECT_URI")
+    )
+    flow.fetch_token(authorization_response=request.url)
+
+    credentials = flow.credentials
+    # Guardamos las credenciales en la sesión para usarlas después
+    session['credentials'] = {
+        'token': credentials.token,
+        'refresh_token': credentials.refresh_token,
+        'token_uri': credentials.token_uri,
+        'client_id': credentials.client_id,
+        'client_secret': credentials.client_secret,
+        'scopes': credentials.scopes
+    }
+
+    flash('Google Calendar conectado correctamente.', 'success')
+    return redirect(url_for('dashboard'))
+   
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -112,6 +183,57 @@ def logout():
     logout_user()
     flash('Has cerrado sesión correctamente.', 'info')
     return redirect(url_for('login'))
+
+@app.route('/authorize')
+@login_required
+def authorize():
+    flow = Flow.from_client_secrets_file(
+        GOOGLE_CLIENT_SECRETS_FILE,
+        scopes=SCOPES,
+        redirect_uri=REDIRECT_URI,
+    )
+
+    authorization_url, state = flow.authorization_url(
+        access_type="offline",
+        include_granted_scopes="true"
+    )
+
+    session['state'] = state
+    return redirect(authorization_url)
+
+@app.route('/oauth2callback')
+@login_required
+def oauth2callback():
+    state = session.get('state')
+    if not state:
+        return "Estado de sesión inválido.", 400
+
+    flow = Flow.from_client_secrets_file(
+        GOOGLE_CLIENT_SECRETS_FILE,
+        scopes=SCOPES,
+        state=state,
+        redirect_uri=REDIRECT_URI,
+    )
+
+    flow.fetch_token(authorization_response=request.url)
+
+    credentials = flow.credentials
+    session['google_token'] = credentials_to_dict(credentials)
+
+    flash('Google Calendar vinculado con éxito.', 'success')
+    return redirect(url_for('dashboard'))
+
+
+def credentials_to_dict(credentials):
+    return {
+        'token': credentials.token,
+        'refresh_token': credentials.refresh_token,
+        'token_uri': credentials.token_uri,
+        'client_id': credentials.client_id,
+        'client_secret': credentials.client_secret,
+        'scopes': credentials.scopes
+    }
+
 
 @app.route('/dashboard')
 @login_required

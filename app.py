@@ -6,7 +6,9 @@ from flask_login import LoginManager
 from sqlalchemy.orm import DeclarativeBase
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_migrate import Migrate
+from flask_jwt_extended import JWTManager
 from werkzeug.security import generate_password_hash
+from sqlalchemy import inspect
 
 # Logging
 logging.basicConfig(level=logging.DEBUG)
@@ -30,7 +32,11 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_pre_ping": True,
 }
 
-# Inicializar extensiones con app
+# JWT Config
+app.config['JWT_SECRET_KEY'] = os.environ.get("JWT_SECRET_KEY", "clave-super-secreta")  # Cambiar en producción
+jwt = JWTManager(app)
+
+# Inicializar extensiones
 db.init_app(app)
 migrate = Migrate(app, db)
 
@@ -48,25 +54,26 @@ def load_user(user_id):
 
 # Crear tablas y usuario admin por defecto
 with app.app_context():
-    # Import models to ensure they're registered for migrations
+    # Importar modelos
     import models
-
-    # Crear usuario admin si no existe
     from models import User
-    from werkzeug.security import generate_password_hash
 
-    #admin_user = User.query.filter_by(username='admin').first()
-    #if not admin_user:
-    #    admin_user = User(
-    #        username='admin',
-    #        email='admin@taskapp.com',
-    #        password_hash=generate_password_hash('admin123'),
-    #        is_admin=True
-    #    )
-    #    db.session.add(admin_user)
-    #    db.session.commit()
-    #    app.logger.info("Usuario administrador creado: admin/admin123")
+    # Verificar si existe la tabla 'user'
+    inspector = inspect(db.engine)
+    if 'user' in inspector.get_table_names():
+        admin_user = User.query.filter_by(username='admin').first()
+        if not admin_user:
+            admin_user = User(
+                username='admin',
+                email='admin@example.com',
+                password_hash=generate_password_hash('admin123'),
+                is_admin=True,
+                can_assign_tasks=True,
+                can_create_groups=True,
+                is_verified=True
+            )
+            db.session.add(admin_user)
+            db.session.commit()
 
-
-# Importar rutas
+# Importar rutas al final
 import routes
