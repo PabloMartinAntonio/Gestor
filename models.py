@@ -8,6 +8,8 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(64), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
+    is_verified = db.Column(db.Boolean, default=False, nullable=False)
+    email_verification_token = db.Column(db.String(100), unique=True, nullable=True)
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
     can_assign_tasks = db.Column(db.Boolean, default=False, nullable=False)
     can_create_groups = db.Column(db.Boolean, default=False, nullable=False)
@@ -190,6 +192,18 @@ class UserAchievement(db.Model):
     
     def __repr__(self):
         return f'<UserAchievement {self.user.username} - {self.achievement.name}>'
+
+class VerificationCode(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    code = db.Column(db.String(6), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+
+    user = db.relationship('User', backref='verification_codes')
+
+    def is_expired(self):
+        return datetime.utcnow() > self.expires_at
+
 
 class OfflineAction(db.Model):
     id = db.Column(db.Integer, primary_key=True)

@@ -4,6 +4,20 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from app import app, db
 from models import User, Task
+from flask_jwt_extended import create_access_token
+from flask import redirect, url_for, session, request, jsonify
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
+import os
+import pathlib
+
+os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"  # Solo para desarrollo local
+
+GOOGLE_CLIENT_SECRETS_FILE = os.path.join(pathlib.Path(__file__).parent, "client_secret.json")
+
+SCOPES = ["https://www.googleapis.com/auth/calendar"]
+REDIRECT_URI = "http://localhost:5000/oauth2callback"
 
 @app.route('/')
 def index():
@@ -36,6 +50,24 @@ def login():
             flash('Usuario o contraseña incorrectos', 'error')
     
     return render_template('login.html')
+
+# Nueva ruta API para login con JWT
+@app.route('/api/login', methods=['POST'])
+def api_login():
+    data = request.get_json()
+    if not data or 'username' not in data or 'password' not in data:
+        return jsonify({"msg": "Faltan usuario o contraseña"}), 400
+
+    username = data['username']
+    password = data['password']
+
+    user = User.query.filter_by(username=username).first()
+
+    if not user or not check_password_hash(user.password_hash, password):
+        return jsonify({"msg": "Usuario o contraseña incorrectos"}), 401
+
+    access_token = create_access_token(identity=user.id)
+    return jsonify(access_token=access_token), 200
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -86,7 +118,8 @@ def logout():
 def dashboard():
     if current_user.is_admin:
         return redirect(url_for('admin_dashboard'))
-    
+    # Aquí sigue tu código existente para dashboard normal
+
     # Get tasks assigned to current user
     status_filter = request.args.get('status', 'all')
     
@@ -2074,6 +2107,7 @@ def api_admin_delete_group(group_id):
 def forgot_password():
     return render_template('forgot_password.html')
 
+
 @app.route('/api/forgot-password', methods=['POST'])
 def api_forgot_password():
     try:
@@ -2115,3 +2149,5 @@ def api_forgot_password():
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'message': str(e)})
+
+
